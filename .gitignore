@@ -1,0 +1,15 @@
+node_modules/
+.next/
+.env*
+!.env.example
+.pgdata/
+*.log
+tsconfig.tsbuildinfo
+
+# Local fixtures, database exports and private keys
+.qa*
+*.dump
+*.backup
+*.sql.gz
+*.pem
+*.key
