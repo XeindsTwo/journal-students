@@ -1,18 +1,18 @@
 import {NextRequest,NextResponse} from 'next/server';
 import {db} from '@/lib/db';
-import {cookieOptions,ownerConfig,sameOrigin,sessionCookie,SESSION_SECONDS} from '@/lib/auth';
+import {cookieOptions,getOwner,sameOrigin,sessionCookie,SESSION_SECONDS} from '@/lib/auth';
 import {newToken,tokenHash,verifyPassword} from '@/lib/auth-crypto.mjs';
 export const runtime='nodejs';
 export const dynamic='force-dynamic';
 const reply=(error:string,status:number)=>NextResponse.json({error},{status,headers:{'Cache-Control':'no-store'}});
 export async function POST(request:NextRequest){
  if(!sameOrigin(request))return reply('Запрос с другого сайта запрещён',403);
- const owner=ownerConfig();if(!owner)return reply('Вход ещё не настроен на сервере',503);
  if(Number(request.headers.get('content-length')??0)>4096)return reply('Слишком большой запрос',413);
  let input;try{input=await request.json();}catch{return reply('Проверь логин и пароль',400);}
  if(!input||typeof input.username!=='string'||input.username.length>100||typeof input.password!=='string'||input.password.length>128)return reply('Проверь логин и пароль',400);
  let client;
  try{
+ const owner=await getOwner();if(!owner)return reply('Учётная запись ещё не создана в базе',503);
  client=await db.connect();await client.query('BEGIN');
  const ip=request.headers.get('x-real-ip')??request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()??'local';
  const keys=[{key:'global',limit:60},{key:tokenHash(ip),limit:10}];

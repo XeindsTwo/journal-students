@@ -5,15 +5,15 @@ import pg from 'pg';
 import {dbConfig} from '../lib/db-config.mjs';
 import {tokenHash,newToken} from '../lib/auth-crypto.mjs';
 const base=process.env.TEST_URL??'http://127.0.0.1:3000';if(!['127.0.0.1','localhost'].includes(new URL(base).hostname))throw Error('This auth test only uses a local server');
-const username=process.env.AUTH_USERNAME;let password=process.env.AUTH_TEST_PASSWORD;
+const client=new pg.Client(dbConfig());await client.connect();const owner=(await client.query('SELECT username,password_hash FROM auth_users WHERE id=1')).rows[0];const username=owner?.username;let password=process.env.AUTH_TEST_PASSWORD;
 if(!password){const local=await fs.readFile('.auth-owner.txt','utf8');password=local.match(/^Пароль: (.+)$/m)?.[1];}if(!username||!password)throw Error('Local owner credentials are required');
-const client=new pg.Client(dbConfig());await client.connect();const issued=[];const ip='auth-test-'+randomBytes(12).toString('hex');const limitedIp=ip+'-limit';const cookieName=process.env.TEST_SECURE_COOKIE==='1'?'__Host-journal_session':'journal_session';
+const issued=[];const ip='auth-test-'+randomBytes(12).toString('hex');const limitedIp=ip+'-limit';const cookieName=process.env.TEST_SECURE_COOKIE==='1'?'__Host-journal_session':'journal_session';
 const post=(path,body,extra={})=>fetch(base+path,{method:'POST',headers:{Origin:base,'Content-Type':'application/json','x-real-ip':ip,...extra},body:JSON.stringify(body)});
 const readCookie=response=>{const raw=response.headers.get('set-cookie');assert.ok(raw,'session cookie is missing');assert.match(raw,/HttpOnly/i);assert.match(raw,/SameSite=Lax/i);assert.match(raw,/Max-Age=604800/i);assert.match(raw,/Path=\//i);if(process.env.TEST_SECURE_COOKIE==='1')assert.match(raw,/Secure/i);const cookie=raw.split(';')[0];assert.ok(cookie.startsWith(cookieName+'='));issued.push(cookie.slice(cookie.indexOf('=')+1));return cookie;};
 try{
  const before=(await client.query('SELECT count(*)::int AS n FROM groups')).rows[0].n;
  for(const path of ['/','/journals/11']){const response=await fetch(base+path,{redirect:'manual'});assert.equal(response.status,307);assert.ok(response.headers.get('location')?.startsWith('/login'));}
- const page=await fetch(base+'/login');assert.equal(page.status,200);const html=await page.text();assert.ok(html.includes('Вход в журнал'));assert.ok(html.includes('name="username"'));assert.ok(html.includes('type="password"'));assert.equal(html.includes(password),false);assert.equal(html.includes(process.env.AUTH_PASSWORD_HASH),false);
+ const page=await fetch(base+'/login');assert.equal(page.status,200);const html=await page.text();assert.ok(html.includes('Вход в журнал'));assert.ok(html.includes('name="username"'));assert.ok(html.includes('type="password"'));assert.equal(html.includes(password),false);assert.equal(html.includes(owner.password_hash),false);
  assert.equal((await fetch(base+'/api/journal')).status,401);
  assert.equal((await post('/api/journal',{action:'group',name:'should-not-exist',names:[],joined_on:'2026-09-01'})).status,401);
  assert.equal((await client.query('SELECT count(*)::int AS n FROM groups')).rows[0].n,before);

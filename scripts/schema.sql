@@ -49,3 +49,6 @@ CREATE TABLE IF NOT EXISTS mutation_receipts (request_id uuid PRIMARY KEY,digest
 CREATE TABLE IF NOT EXISTS auth_sessions(token_hash text PRIMARY KEY,owner_fingerprint text NOT NULL,expires_at timestamptz NOT NULL);
 CREATE INDEX IF NOT EXISTS auth_sessions_expiry_idx ON auth_sessions(expires_at);
 CREATE TABLE IF NOT EXISTS auth_attempts(key text PRIMARY KEY,attempts integer NOT NULL,window_start timestamptz NOT NULL);
+
+-- A single owner account. Passwords are stored only as salted hashes.
+CREATE TABLE IF NOT EXISTS auth_users (id smallint PRIMARY KEY DEFAULT 1 CHECK(id=1),username text NOT NULL UNIQUE CHECK(length(username) BETWEEN 3 AND 100),password_hash text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now());
