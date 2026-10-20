@@ -1,10 +1,11 @@
+import {authenticatedFetch,closeTestSession} from "./test-session.mjs";
 import assert from "node:assert/strict";
 import pg from "pg";
 import {dbConfig} from "../lib/db-config.mjs";
 const client=new pg.Client(dbConfig());await client.connect();let groupId,otherGroupId;
 const endpoint="http://127.0.0.1:3000/api/journal";
-async function post(body,status=200){const r=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const d=await r.json();assert.equal(r.status,status,JSON.stringify(d));return d;}
-async function get(){return(await fetch(endpoint)).json();}
+async function post(body,status=200){const r=await authenticatedFetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});const d=await r.json();assert.equal(r.status,status,JSON.stringify(d));return d;}
+async function get(){return(await authenticatedFetch(endpoint)).json();}
 try{
  groupId=(await post({action:"group",name:"QA-batch-"+Date.now(),names:["Первый студент","Второй студент","Третий студент"],joined_on:"2026-09-01"})).id;
  const j=(await post({action:"journal",group_id:groupId,name:"Проверка быстрого заполнения",short_name:"Тест",period:"2026"})).id;
@@ -31,5 +32,5 @@ try{
  console.log("OK: быстрое заполнение, добавление к старым оценкам, Н/О, независимость полей, валидация, чужая группа и откат всего списка при ошибке.");
 }finally{
  for(const id of [groupId,otherGroupId].filter(Boolean)){await client.query("BEGIN");await client.query("DELETE FROM lessons WHERE journal_id IN (SELECT id FROM journals WHERE group_id=$1)",[id]);await client.query("DELETE FROM journals WHERE group_id=$1",[id]);await client.query("DELETE FROM students WHERE group_id=$1",[id]);await client.query("DELETE FROM groups WHERE id=$1",[id]);await client.query("COMMIT");}
- await client.end();
+ await client.end();await closeTestSession();
 }

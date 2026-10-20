@@ -1,10 +1,11 @@
+import {authenticatedFetch,closeTestSession} from "./test-session.mjs";
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import fs from 'node:fs/promises';
 import pg from 'pg';
 import {dbConfig} from '../lib/db-config.mjs';
 const client=new pg.Client(dbConfig());await client.connect();let groupId;const receipts=[];const keep=process.argv.includes('--keep');
-const post=async(body,status=200)=>{const r=await fetch('http://127.0.0.1:3000/api/journal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json();assert.equal(r.status,status,JSON.stringify(d));return d;};
+const post=async(body,status=200)=>{const r=await authenticatedFetch('http://127.0.0.1:3000/api/journal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json();assert.equal(r.status,status,JSON.stringify(d));return d;};
 try{
  groupId=(await post({action:'group',name:'QA-optimistic-'+Date.now(),names:['Первый тестовый студент','Второй тестовый студент'],joined_on:'2026-09-01'})).id;
  const journal=(await post({action:'journal',group_id:groupId,name:'Проверка мгновенного сохранения',short_name:'Тест',period:'2026'})).id;
@@ -20,4 +21,4 @@ try{
  const otherId=randomUUID();receipts.push(otherId);const result=await post({action:'mark-operations',request_id:otherId,operations:[{lesson_id:lesson,student_id:students[1],operation:'attendance',attendance:'late'},{lesson_id:lesson,student_id:students[1],operation:'add-grade',grade:3}]});assert.equal(result.marks[0].attendance,'late');assert.deepEqual(result.marks[0].grades,[3]);
  console.log('Optimistic API: concurrent replay, duplicate grades, ordered toggles, rollback and point responses passed');
  if(keep){await fs.writeFile('.qa-optimistic.json',JSON.stringify({groupId,journal,lesson,students,receipts}));console.log('UI fixture journal: '+journal);}
-}finally{if(groupId&&!keep){await client.query('BEGIN');await client.query('DELETE FROM lessons WHERE journal_id IN (SELECT id FROM journals WHERE group_id=$1)',[groupId]);await client.query('DELETE FROM journals WHERE group_id=$1',[groupId]);await client.query('DELETE FROM students WHERE group_id=$1',[groupId]);await client.query('DELETE FROM groups WHERE id=$1 AND name LIKE $2',[groupId,'QA-optimistic-%']);await client.query('COMMIT');await client.query('DELETE FROM mutation_receipts WHERE request_id=ANY($1::uuid[])',[receipts]);}await client.end();}
+}finally{if(groupId&&!keep){await client.query('BEGIN');await client.query('DELETE FROM lessons WHERE journal_id IN (SELECT id FROM journals WHERE group_id=$1)',[groupId]);await client.query('DELETE FROM journals WHERE group_id=$1',[groupId]);await client.query('DELETE FROM students WHERE group_id=$1',[groupId]);await client.query('DELETE FROM groups WHERE id=$1 AND name LIKE $2',[groupId,'QA-optimistic-%']);await client.query('COMMIT');await client.query('DELETE FROM mutation_receipts WHERE request_id=ANY($1::uuid[])',[receipts]);}await client.end();await closeTestSession();}

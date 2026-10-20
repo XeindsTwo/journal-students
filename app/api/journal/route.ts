@@ -1,3 +1,4 @@
+import {authGuard} from "@/lib/auth";
 import {createHash} from "node:crypto";
 import {applyMark} from "@/lib/mark-operations.mjs";
 import {NextRequest, NextResponse} from "next/server";
@@ -24,6 +25,7 @@ const schema = z.discriminatedUnion("action", [
  z.object({action:z.literal("delete-lesson"),id})
 ]);
 export async function GET() {
+ const denied=await authGuard();if(denied)return denied;
  try {
  const [groups,students,journals,lessons,marks] = await Promise.all([
  db.query("SELECT * FROM groups ORDER BY name"),
@@ -32,11 +34,12 @@ export async function GET() {
  db.query("SELECT *, to_char(date,'YYYY-MM-DD') AS date FROM lessons ORDER BY lessons.date,slot,id"),
  db.query("SELECT * FROM marks")
  ]);
- return NextResponse.json({groups:groups.rows,students:students.rows,journals:journals.rows,lessons:lessons.rows,marks:marks.rows});
+ return NextResponse.json({groups:groups.rows,students:students.rows,journals:journals.rows,lessons:lessons.rows,marks:marks.rows},{headers:{"Cache-Control":"private, no-store"}});
  } catch(e) {console.error("Journal database error", (e as Error).message); return NextResponse.json({error:"База недоступна. Запустите PostgreSQL через start.ps1."},{status:503});}
 }
 export async function POST(req:NextRequest) {
- // Local app: reject cross-origin writes; do not expose without authentication.
+ const denied=await authGuard();if(denied)return denied;
+ // Every journal request requires the owner session; reject cross-origin writes too.
  const origin=req.headers.get("origin");
  if(origin && origin!==req.nextUrl.origin && origin!==`http://${req.headers.get("host")}`) return NextResponse.json({error:"Запрос с другого сайта запрещён"},{status:403});
  let raw;

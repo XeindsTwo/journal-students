@@ -44,3 +44,8 @@ ALTER TABLE marks ADD CONSTRAINT marks_grades_check CHECK(grades <@ ARRAY[2,3,4,
 COMMIT;
 
 CREATE TABLE IF NOT EXISTS mutation_receipts (request_id uuid PRIMARY KEY,digest text NOT NULL,response jsonb NOT NULL,created_at timestamptz NOT NULL DEFAULT now());
+
+-- Owner-only authentication. Session tokens are stored as hashes.
+CREATE TABLE IF NOT EXISTS auth_sessions(token_hash text PRIMARY KEY,owner_fingerprint text NOT NULL,expires_at timestamptz NOT NULL);
+CREATE INDEX IF NOT EXISTS auth_sessions_expiry_idx ON auth_sessions(expires_at);
+CREATE TABLE IF NOT EXISTS auth_attempts(key text PRIMARY KEY,attempts integer NOT NULL,window_start timestamptz NOT NULL);

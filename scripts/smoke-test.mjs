@@ -1,3 +1,4 @@
+import {authenticatedFetch,closeTestSession} from "./test-session.mjs";
 import assert from "node:assert/strict";
 import pg from "pg";
 import {dbConfig} from "../lib/db-config.mjs";
@@ -5,10 +6,10 @@ const base=process.env.TEST_URL??"http://127.0.0.1:3000";
 const client=new pg.Client(dbConfig());await client.connect();
 let groupId;
 async function post(body,expected=200){
- const res=await fetch(base+"/api/journal",{method:"POST",headers:{"Content-Type":"application/json","Origin":base},body:JSON.stringify(body)});
+ const res=await authenticatedFetch(base+"/api/journal",{method:"POST",headers:{"Content-Type":"application/json","Origin":base},body:JSON.stringify(body)});
  const data=await res.json();assert.equal(res.status,expected,JSON.stringify(data));return data;
 }
-async function get(){const r=await fetch(base+"/api/journal");assert.equal(r.status,200);return r.json();}
+async function get(){const r=await authenticatedFetch(base+"/api/journal");assert.equal(r.status,200);return r.json();}
 try{
  groupId=(await post({action:"group",name:"QA-"+Date.now(),names:["Тест Один","Тест Два"],joined_on:"2026-09-01"})).id;
  const j=(await post({action:"journal",group_id:groupId,name:"Проверка API",short_name:"QA",period:"2026–2027"})).id;
@@ -31,7 +32,7 @@ try{
  await post({action:"students",group_id:groupId,names:["Новый студент"],joined_on:"2026-10-19"});
  d=await get();assert.equal(d.students.filter(s=>s.group_id===groupId).length,3);
  await post({action:"mark",lesson_id:l,student_id:students[1].id,attendance:"present",grade:6},400);
- const cross=await fetch(base+"/api/journal",{method:"POST",headers:{"Content-Type":"application/json","Origin":"https://example.invalid"},body:JSON.stringify({action:"complete",lesson_id:l})});assert.equal(cross.status,403);
+ const cross=await authenticatedFetch(base+"/api/journal",{method:"POST",headers:{"Content-Type":"application/json","Origin":"https://example.invalid"},body:JSON.stringify({action:"complete",lesson_id:l})});assert.equal(cross.status,403);
  await post({action:"delete-lesson",id:future});
  console.log("API OK: группы, общие списки, пары, дубликаты, Н + оценка, присутствие, теги, история, валидация, origin.");
 } finally {
@@ -43,5 +44,5 @@ try{
  await client.query("DELETE FROM groups WHERE id=$1",[groupId]);
  await client.query("COMMIT");
  }
- await client.end();
+ await client.end();await closeTestSession();
 }
