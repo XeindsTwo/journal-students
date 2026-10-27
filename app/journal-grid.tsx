@@ -2,7 +2,7 @@
 import {AddEntryButton} from "./add-entry-button";
 
 import {memo,useMemo,useCallback,useRef,useState} from "react";
-import {ListChecks,ClipboardCheck} from "lucide-react";
+import {ListChecks} from "lucide-react";
 import {MarkCell,type MarkEdit} from "./mark-cell";
 import type {Lesson,Student,Mark} from "@/lib/types";
 import {activeOn} from "@/lib/domain.mjs";
@@ -40,7 +40,7 @@ export function JournalGrid({lessons,students,marks,onOpenLesson,onQuickFill,onA
  }
  }
  return <div ref={scroll} className="table-scroll journal-grid" onFocusCapture={e=>setFocused(Boolean((e.target as HTMLElement).closest(".mark-cell")))} onBlurCapture={e=>{if(!e.currentTarget.contains(e.relatedTarget as Node|null))setFocused(false);}}>
- <table className="journal-table"><thead><tr><th className="student-col"><span>Студент</span></th>{lessons.map((lesson,column)=><th key={lesson.id} className={lesson.kind==="test"?"test-column":undefined} data-current-column={focused&&selected?.column===column?"true":undefined}><div className="lesson-column-heading"><button className="lesson-head" title={lesson.kind==="test"?lesson.title:undefined} onClick={()=>onOpenLesson(lesson)}>{lesson.kind==="test"&&<span className="test-column-name"><ClipboardCheck size={15}/>{lesson.title}</span>}<strong>{new Date(lesson.date+"T12:00:00").toLocaleDateString("ru",{day:"numeric",month:"short"})}</strong></button><button className="quick-column-button" aria-label={"Быстрое заполнение: "+lesson.date+", "+(lesson.kind==="test"?"тест "+lesson.title:lesson.slot+" пара")} onClick={()=>onQuickFill(lesson.id)}><ListChecks size={17}/></button></div></th>)}<th><AddEntryButton compact onSelect={onAddLesson}/></th></tr></thead>
+ <table className="journal-table"><thead><tr><th className="student-col"><span>Студент</span></th>{lessons.map((lesson,column)=><th key={lesson.id} className={lesson.kind==="test"?"test-column":undefined} data-current-column={focused&&selected?.column===column?"true":undefined}><div className="lesson-column-heading"><button className="lesson-head" title={lesson.kind==="test"?lesson.title:undefined} onClick={()=>onOpenLesson(lesson)}><strong>{new Date(lesson.date+"T12:00:00").toLocaleDateString("ru",{day:"numeric",month:"short"})}</strong></button><button className="quick-column-button" aria-label={"Быстрое заполнение: "+lesson.date+", "+(lesson.kind==="test"?"тест "+lesson.title:lesson.slot+" пара")} onClick={()=>onQuickFill(lesson.id)}><ListChecks size={17}/></button></div></th>)}<th><AddEntryButton compact onSelect={onAddLesson}/></th></tr></thead>
  <tbody>{students.map((student,row)=><tr key={student.id}><td className="student-col"><button className="student-name" onClick={()=>onEditStudent(student)}><span className="row-number">{String(row+1).padStart(2,"0")}</span>{student.name}{student.left_on&&<small className="archived">выбыл</small>}</button></td>{lessons.map((lesson,column)=>{
  const mark=markMap.get(lesson.id+":"+student.id);
  return <td key={lesson.id} className={lesson.kind==="test"?"test-column":undefined}>{!active(row,column)?<span className="inactive-mark">—</span>:<GridCell mark={mark} student={student} lesson={lesson} row={row} column={column} controls={controls} tabIndex={(selected?selected.row===row&&selected.column===column:first?.row===row&&first?.column===column)?0:-1}/>}</td>;
