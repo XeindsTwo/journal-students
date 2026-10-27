@@ -12,7 +12,7 @@ const directory=path.join(root,'.auth-db-test-'+suffix);await fs.mkdir(directory
 try{
  await client.query('CREATE SCHEMA '+schema);
  await client.query('SET search_path TO '+schema);
- const sql=await fs.readFile('scripts/schema.sql','utf8');await client.query(sql.slice(sql.indexOf('CREATE TABLE IF NOT EXISTS auth_sessions')));
+ const sql=await fs.readFile('scripts/schema.sql','utf8');await client.query(sql.slice(sql.indexOf('CREATE TABLE IF NOT EXISTS auth_sessions')).split('-- Independent test columns')[0]);
  const config=dbConfig();let url;if(config.connectionString)url=new URL(config.connectionString);else{url=new URL('postgresql://127.0.0.1');url.hostname=config.host;url.port=String(config.port);url.pathname='/'+config.database;url.username=config.user;url.password=config.password;}
  url.searchParams.set('options','-c search_path='+schema);const env={...process.env,DATABASE_URL:url.toString(),AUTH_USERNAME:'ignored-value',AUTH_PASSWORD_HASH:'ignored-value'};
  server=spawn(process.execPath,['node_modules/next/dist/bin/next','start','--hostname','127.0.0.1','--port','3113'],{cwd:root,env,stdio:['ignore','pipe','pipe'],windowsHide:true});

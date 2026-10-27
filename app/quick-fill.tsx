@@ -14,6 +14,7 @@ export function QuickFill({initialLessonId,lessons,students,marks,onSaved,onClos
  const request=useRef<{key:string;id:string}|null>(null);
  const fields=useRef<Record<number,HTMLInputElement|null>>({});
  const lesson=lessons.find(l=>l.id===lessonId);
+ const isTest=lesson?.kind==="test";
  const roster=students.filter(s=>lesson&&activeOn(s,lesson.date));
  const rows=roster.flatMap(s=>{const d=drafts[s.id];if(!d)return [];
  const row:{student_id:number;grade?:number;attendance?:Draft["attendance"]}={student_id:s.id};
@@ -32,7 +33,7 @@ export function QuickFill({initialLessonId,lessons,students,marks,onSaved,onClos
  if(["н","n","о","o"].includes(letter)){
  e.preventDefault();if(e.repeat)return;
  const student=roster[index];if(!student)return;
- const desired=["н","n"].includes(letter)?"absent":"late";
+ const desired=["н","n"].includes(letter)?"absent":"late";if(isTest&&desired==="late")return;
  const current=drafts[student.id]?.attendance??markFor(student.id)?.attendance??"unknown";
  setDraft(student.id,{attendance:current===desired?"unknown":desired});return;
  }
@@ -59,17 +60,17 @@ export function QuickFill({initialLessonId,lessons,students,marks,onSaved,onClos
  }catch(e){setError((e instanceof Error?e.message:"Не удалось сохранить")+". Повторите сохранение — оценки не продублируются.");}finally{setSaving(false);}
  }
  return <><AnimatedDialog label="Быстрое заполнение" wide onClose={requestClose}>
- <header><div><h2>Быстрое заполнение</h2><p className="quick-fill-subtitle">Одна пара · Enter — следующий студент</p></div><button className="icon-button" aria-label="Закрыть быстрое заполнение" disabled={saving||retryLocked} onClick={requestClose}><X/></button></header>
- <div className="quick-fill-controls"><CustomSelect label="Пара для быстрого заполнения" value={String(lessonId)} disabled={saving||retryLocked} onValueChange={v=>selectLesson(Number(v))} options={lessons.map(l=>({value:String(l.id),label:new Date(l.date+"T12:00:00").toLocaleDateString("ru",{day:"numeric",month:"long"})+" · "+l.slot+" пара"+(l.title?" · "+l.title:"")}))}/></div>
- <div className="quick-fill-table-scroll"><table className="quick-fill-table"><thead><tr><th>Студент</th><th>Н</th><th>О</th><th>Оценка</th></tr></thead><tbody>{roster.map((student,index)=>{
+ <header><div><h2>Быстрое заполнение</h2><p className="quick-fill-subtitle">{isTest?"Тест · Enter — следующий студент":"Одна пара · Enter — следующий студент"}</p></div><button className="icon-button" aria-label="Закрыть быстрое заполнение" disabled={saving||retryLocked} onClick={requestClose}><X/></button></header>
+ <div className="quick-fill-controls"><CustomSelect label="Пара для быстрого заполнения" value={String(lessonId)} disabled={saving||retryLocked} onValueChange={v=>selectLesson(Number(v))} options={lessons.map(l=>({value:String(l.id),label:new Date(l.date+"T12:00:00").toLocaleDateString("ru",{day:"numeric",month:"long"})+" · "+(l.kind==="test"?"Тест":l.slot+" пара")+(l.title?" · "+l.title:"")}))}/></div>
+ <div className="quick-fill-table-scroll"><table className="quick-fill-table"><thead><tr><th>Студент</th><th>Н</th>{!isTest&&<th>О</th>}<th>Оценка</th></tr></thead><tbody>{roster.map((student,index)=>{
  const mark=markFor(student.id),draft=drafts[student.id],attendance=draft?.attendance??mark?.attendance??"unknown";
  return <tr key={student.id}><td><span className="quick-row-number">{String(index+1).padStart(2,"0")}</span>{student.name}</td>
  <td><label className="quick-check absent"><input type="checkbox" disabled={saving||retryLocked} checked={attendance==="absent"} aria-label={"Н: "+student.name} onChange={e=>setDraft(student.id,{attendance:e.target.checked?"absent":"unknown"})}/><span><Check size={15}/></span></label></td>
- <td><label className="quick-check late"><input type="checkbox" disabled={saving||retryLocked} checked={attendance==="late"} aria-label={"О: "+student.name} onChange={e=>setDraft(student.id,{attendance:e.target.checked?"late":"unknown"})}/><span><Check size={15}/></span></label></td>
+ {!isTest&&<td><label className="quick-check late"><input type="checkbox" disabled={saving||retryLocked} checked={attendance==="late"} aria-label={"О: "+student.name} onChange={e=>setDraft(student.id,{attendance:e.target.checked?"late":"unknown"})}/><span><Check size={15}/></span></label></td>}
  <td><div className="quick-grade-field"><input ref={element=>{fields.current[student.id]=element;}} aria-label={"Оценка: "+student.name} autoComplete="off" inputMode="numeric" type="text" pattern="[2-5]" maxLength={1} disabled={saving||retryLocked} placeholder="—" value={draft?.grade??""} onChange={e=>{const value=e.target.value;if(/^[2-5]?$/.test(value))setDraft(student.id,{grade:value});else setError("Оценка должна быть от 2 до 5");}} onKeyDown={e=>nextStudent(e,index)}/>
  {(mark?.grades?.length??0)>0&&<span className="existing-grades" aria-label={"Уже выставлено: "+mark!.grades.join(", ")}>{mark!.grades.map((grade,i)=><span key={i} className={"mark-badge grade-"+grade}>{grade}</span>)}</span>}</div></td></tr>;
  })}</tbody></table>{roster.length===0&&<p className="no-results">На эту дату в группе нет студентов.</p>}</div>
- <div className="quick-fill-bottom">{error&&<p role="alert" className="form-error">{error}</p>}<div className="quick-fill-footer"><span role="status">{dirty?"Изменено строк: "+rows.length:"Новые оценки добавятся к существующим"}</span><div><button className="button secondary" disabled={saving||retryLocked} onClick={requestClose}>Отмена</button><button className="button primary" disabled={!dirty||saving} onClick={save}>{saving?<><LoaderCircle size={16} className="spin"/>Сохраняем…</>:retryLocked?"Повторить сохранение":"Сохранить"}</button></div></div></div>
+ <div className="quick-fill-bottom">{error&&<p role="alert" className="form-error">{error}</p>}<div className="quick-fill-footer"><span role="status">{dirty?"Изменено строк: "+rows.length:isTest?"Новая оценка заменит предыдущую":"Новые оценки добавятся к существующим"}</span><div><button className="button secondary" disabled={saving||retryLocked} onClick={requestClose}>Отмена</button><button className="button primary" disabled={!dirty||saving} onClick={save}>{saving?<><LoaderCircle size={16} className="spin"/>Сохраняем…</>:retryLocked?"Повторить сохранение":"Сохранить"}</button></div></div></div>
  </AnimatedDialog>
  <AnimatePresence>{discard&&<AnimatedDialog label="Не сохранять изменения?" onClose={()=>setDiscard(false)}><header><h2>Не сохранять изменения?</h2><button className="icon-button" aria-label="Закрыть подтверждение" onClick={()=>setDiscard(false)}><X/></button></header><p className="form-hint">Введённые в быстром заполнении значения будут потеряны.</p><div className="form-actions"><button className="button secondary" onClick={()=>setDiscard(false)}>Продолжить заполнение</button><button className="button danger" onClick={()=>{setDiscard(false);setDrafts({});setError("");if(changeTarget!==null){setLessonId(changeTarget);setChangeTarget(null);}else onClose();}}>Не сохранять</button></div></AnimatedDialog>}</AnimatePresence>
  </>;
