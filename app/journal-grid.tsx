@@ -16,6 +16,8 @@ export function JournalGrid({lessons,students,marks,onOpenLesson,onQuickFill,onA
  const [selected,setSelected]=useState<Cell|null>(null),[focused,setFocused]=useState(false);
  const buttons=useRef(new Map<string,HTMLButtonElement>());
  const scroll=useRef<HTMLDivElement>(null);
+ const drag=useRef<{id:number;x:number;left:number;started:boolean}|null>(null);
+ const suppressClick=useRef(false);
  const markMap=useMemo(()=>new Map(marks.map(mark=>[mark.lesson_id+":"+mark.student_id,mark])),[marks]);
  const controls=useRef<Controls>({buttons:buttons.current,focus:()=>{},move:()=>{},edit:onEditMark});
  controls.current={buttons:buttons.current,focus:(row,column)=>setSelected({row,column}),move,edit:onEditMark};
@@ -39,7 +41,13 @@ export function JournalGrid({lessons,students,marks,onOpenLesson,onQuickFill,onA
  row+=rowStep;column+=columnStep;
  }
  }
- return <div ref={scroll} className="table-scroll journal-grid" onFocusCapture={e=>setFocused(Boolean((e.target as HTMLElement).closest(".mark-cell")))} onBlurCapture={e=>{if(!e.currentTarget.contains(e.relatedTarget as Node|null))setFocused(false);}}>
+ return <div ref={scroll} className="table-scroll journal-grid"
+ onPointerDown={e=>{suppressClick.current=false;if(e.pointerType!=="mouse"||e.button!==0||!(e.target as HTMLElement).closest(".mark-cell")||e.currentTarget.scrollWidth<=e.currentTarget.clientWidth)return;drag.current={id:e.pointerId,x:e.clientX,left:e.currentTarget.scrollLeft,started:false};}}
+ onPointerMove={e=>{const state=drag.current;if(!state||state.id!==e.pointerId)return;if(!(e.buttons&1)){drag.current=null;return;}const dx=e.clientX-state.x;if(!state.started){if(Math.abs(dx)<7)return;state.started=true;suppressClick.current=true;e.currentTarget.setPointerCapture(e.pointerId);}e.currentTarget.scrollLeft=state.left-dx;}}
+ onPointerUp={()=>{drag.current=null;}} onPointerCancel={()=>{drag.current=null;}} onLostPointerCapture={()=>{drag.current=null;}}
+ onPointerLeave={()=>{if(!drag.current?.started)drag.current=null;}}
+ onClickCapture={e=>{if(suppressClick.current){suppressClick.current=false;e.preventDefault();e.stopPropagation();}}}
+ onFocusCapture={e=>setFocused(Boolean((e.target as HTMLElement).closest(".mark-cell")))} onBlurCapture={e=>{if(!e.currentTarget.contains(e.relatedTarget as Node|null))setFocused(false);}}>
  <table className="journal-table"><thead><tr><th className="student-col"><span>Студент</span></th>{lessons.map((lesson,column)=><th key={lesson.id} className={lesson.kind==="lesson"?undefined:lesson.kind+"-column"} data-current-column={focused&&selected?.column===column?"true":undefined}><div className="lesson-column-heading"><button className="lesson-head" title={lesson.kind!=="lesson"?lesson.title:undefined} onClick={()=>onOpenLesson(lesson)}><strong>{new Date(lesson.date+"T12:00:00").toLocaleDateString("ru",{day:"numeric",month:"short"})}</strong></button><button className="quick-column-button" aria-label={"Быстрое заполнение: "+lesson.date+", "+(lesson.kind!=="lesson"?lesson.title:lesson.slot+" пара")} onClick={()=>onQuickFill(lesson.id)}><ListChecks size={17}/></button></div></th>)}<th><AddEntryButton compact onSelect={onAddLesson}/></th></tr></thead>
  <tbody>{students.map((student,row)=><tr key={student.id}><td className="student-col"><button className="student-name" onClick={()=>onEditStudent(student)}><span className="row-number">{String(row+1).padStart(2,"0")}</span>{student.name}{student.left_on&&<small className="archived">выбыл</small>}</button></td>{lessons.map((lesson,column)=>{
  const mark=markMap.get(lesson.id+":"+student.id);

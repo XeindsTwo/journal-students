@@ -210,3 +210,51 @@ tbody tr:hover td{background:#fefefe}
 
 
 .description-toolbar{display:flex;gap:6px}.description-toolbar .button{min-height:34px;padding:4px 11px}.description-preview{white-space:pre-wrap;overflow-wrap:anywhere;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);margin-top:4px}
+
+/* Journal interaction and compact grade sheet */
+.journal-grid,.grade-sheet{-webkit-user-select:none;user-select:none}
+.journal-grid .mark-cell{-webkit-touch-callout:none;touch-action:manipulation}
+.journal-panel,.journal-content,.table-scroll{min-width:0}
+.journal-app .tabs button{white-space:nowrap}
+.fullscreen-toggle{flex:none}
+.journal-expanded>main{padding:0}
+.journal-expanded .journal-panel{border:0;border-radius:0}
+.journal-expanded .journal-heading{display:none}
+
+.grade-sheet table{width:max-content;min-width:0;line-height:1.25}
+.grade-sheet th,.grade-sheet td{height:auto;padding:2px 6px;border:0;border-right:1px solid var(--line);border-bottom:1px solid var(--line);font-size:14px;white-space:nowrap}
+.grade-sheet thead th{position:sticky;top:0;z-index:2;min-width:58px;background:#edf5ec;padding:5px 6px}
+.grade-sheet abbr{text-decoration:none}
+.grade-sheet .sheet-number{position:sticky;left:0;z-index:1;min-width:36px;width:36px;padding-inline:3px;background:var(--background)}
+.grade-sheet .sheet-name{position:sticky;left:36px;z-index:1;min-width:156px;text-align:left;background:var(--background)}
+.grade-sheet tbody th.sheet-name{font-weight:400}
+.grade-sheet thead :is(.sheet-number,.sheet-name){z-index:3;background:#edf5ec}
+.grade-sheet td.sheet-alert{background:#fff0ef;color:#9e303a}
+
+@media (max-width:1100px), (pointer:coarse){
+ .journal-app>main{padding:10px}
+ .journal-app.journal-expanded>main{padding:0}
+ .journal-heading{display:flex;flex-direction:row;flex-wrap:wrap;padding:14px 16px;gap:12px}
+ .journal-heading .heading-actions{width:auto;flex-direction:row;align-items:center;justify-content:flex-start}
+ .journal-heading .heading-actions .button{min-height:40px;padding:7px 10px}
+ .journal-identity{flex:1 1 340px}
+ .journal-subject-switch{margin-top:9px;gap:8px}
+ .journal-subject-switch .select-trigger{min-width:0;max-width:100%}
+ .journal-app .panel-toolbar{height:auto;min-height:46px;padding:0 12px;gap:4px 12px;flex-wrap:wrap}
+ .journal-app .tabs{min-height:44px;gap:clamp(8px,2vw,20px);max-width:100%;overflow-x:auto}
+ .journal-app .tabs button{gap:5px;flex:none}
+ .journal-app .table-tools{min-height:44px;gap:8px}
+ .journal-grid :is(th,td).student-col{width:190px;min-width:190px;max-width:190px;padding-inline:9px}
+ .journal-grid .student-name{white-space:normal;overflow-wrap:anywhere}
+ .journal-grid .mark-cell{min-height:51px;padding-block:7px}
+ .journal-grid .lesson-column-heading .lesson-head{padding-block:15px}
+ .journal-grid th:not(.student-col){min-width:104px}
+ .grade-sheet .sheet-name{width:156px;max-width:156px;white-space:normal;overflow-wrap:anywhere}
+}
+
+@media (max-width:600px){
+ .journal-app .tabs button svg{display:none}
+ .journal-app .table-tools{margin-left:auto}
+ .journal-grid :is(th,td).student-col{width:144px;min-width:144px;max-width:144px}
+ .grade-sheet .sheet-name{width:120px;min-width:120px;max-width:120px}
+}

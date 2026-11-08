@@ -1,17 +1,16 @@
 "use client";
 import * as ContextMenu from "@radix-ui/react-context-menu";
-import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {Check,Clock,UserX,Eraser,BadgeCheck,CircleAlert,X} from "lucide-react";
 import type {Mark} from "@/lib/types";
-import {useState,type KeyboardEvent,type RefCallback} from "react";
+import {type KeyboardEvent,type RefCallback} from "react";
 import {journalKeyAction} from "@/lib/journal-keyboard.mjs";
 export type MarkEdit={operation:"add-grade"|"remove-grade"|"attendance"|"toggle-attendance"|"clear-grades"|"clear";grade?:number;index?:number;attendance?:"unknown"|"absent"|"late"};
 type Props={independent?:boolean;isTest?:boolean;mark?:Mark;disabled:boolean;label:string;onEdit:(edit:MarkEdit)=>unknown;cellRef?:RefCallback<HTMLButtonElement>;tabIndex?:number;onFocus?:()=>void;onNavigate?:(row:number,column:number)=>void};
 const choices=[{value:5,Icon:BadgeCheck},{value:4,Icon:BadgeCheck},{value:3,Icon:BadgeCheck},{value:2,Icon:CircleAlert}];
 export function MarkCell({independent=false,isTest=false,mark,disabled,label,onEdit,cellRef,tabIndex,onFocus,onNavigate}:Props){
- const [dropdownOpen,setDropdownOpen]=useState(false);
  function keyboard(event:KeyboardEvent<HTMLButtonElement>){
  if(!onNavigate||disabled)return;
+ if(event.key==="ContextMenu"||(event.shiftKey&&event.key==="F10")){event.preventDefault();const cell=event.currentTarget;const rect=cell.getBoundingClientRect();cell.dispatchEvent(new MouseEvent("contextmenu",{bubbles:true,cancelable:true,clientX:rect.left+rect.width/2,clientY:rect.bottom}));return;}
  const action=journalKeyAction(event);if(!action)return;if((isTest||independent)&&action.kind==="attendance"&&action.attendance==="late"){event.preventDefault();return;}event.preventDefault();event.stopPropagation();
  if(action.kind==="move")onNavigate(action.row!,action.column!);
  else if(action.kind==="escape")event.currentTarget.blur();
@@ -19,9 +18,8 @@ export function MarkCell({independent=false,isTest=false,mark,disabled,label,onE
  else if(action.kind==="attendance")void onEdit({operation:"toggle-attendance",attendance:action.attendance as "absent"|"late"});
  }
  const attendance=mark?.attendance??"unknown",grades=mark?.grades??(mark?.grade?[mark.grade]:[]);
- function items(type:"context"|"dropdown"){
- const Item=type==="context"?ContextMenu.Item:DropdownMenu.Item;
- const Separator=type==="context"?ContextMenu.Separator:DropdownMenu.Separator;
+ function items(){
+ const {Item,Separator}=ContextMenu;
  return <>
  {choices.map(({value,Icon})=><Item key={value} className="mark-menu-item" disabled={disabled||(!isTest&&grades.length>=(independent?2:100))} onSelect={()=>onEdit({operation:"add-grade",grade:value})}><span className={`mark-indicator grade-${value}`}><Icon size={16}/></span>Поставить {value}</Item>)}
  <Separator className="menu-separator"/>
@@ -34,16 +32,14 @@ export function MarkCell({independent=false,isTest=false,mark,disabled,label,onE
  <Item className="mark-menu-item" disabled={disabled} onSelect={()=>onEdit({operation:"clear"})}><Eraser size={16}/>Очистить ячейку</Item>
  </>;
  }
- return <ContextMenu.Root><DropdownMenu.Root open={dropdownOpen} onOpenChange={setDropdownOpen}>
- <ContextMenu.Trigger asChild disabled={disabled}><DropdownMenu.Trigger asChild disabled={disabled}>
- <button ref={cellRef} tabIndex={tabIndex} onFocus={onFocus} onKeyDownCapture={keyboard} className="mark-cell" aria-label={label} aria-keyshortcuts={"ArrowUp ArrowDown ArrowLeft ArrowRight Enter 2 3 4 5 N"+((isTest||independent)?"":" O")}>
+ return <ContextMenu.Root>
+ <ContextMenu.Trigger asChild disabled={disabled}>
+ <button ref={cellRef} tabIndex={tabIndex} onFocus={onFocus} onKeyDownCapture={keyboard} className="mark-cell" aria-label={label} aria-keyshortcuts={"ArrowUp ArrowDown ArrowLeft ArrowRight Enter Shift+F10 2 3 4 5 N"+((isTest||independent)?"":" O")}>
  {attendance==="absent"&&<span className="mark-badge absent">Н</span>}
  {attendance==="late"&&<span className="mark-badge late">О</span>}
  {grades.map((grade,index)=><span key={index} className={`mark-badge grade-${grade}`}>{grade}</span>)}
  {grades.length===0&&!["absent","late"].includes(attendance)&&<span className="unknown-dot">·</span>}
- </button></DropdownMenu.Trigger></ContextMenu.Trigger>
- <DropdownMenu.Portal><DropdownMenu.Content onKeyDownCapture={event=>{if(!onNavigate||disabled)return;const action=journalKeyAction(event);if(!action||!(action.kind==="grade"||action.kind==="attendance"))return;if((isTest||independent)&&action.kind==="attendance"&&action.attendance==="late"){event.preventDefault();return;}event.preventDefault();event.stopPropagation();if(action.kind==="grade")void onEdit({operation:"add-grade",grade:action.grade});else void onEdit({operation:"toggle-attendance",attendance:action.attendance as "absent"|"late"});setDropdownOpen(false);}} className="mark-menu dropdown-mark-menu" sideOffset={6} collisionPadding={12} sticky="always" avoidCollisions>{items("dropdown")}</DropdownMenu.Content></DropdownMenu.Portal>
- </DropdownMenu.Root>
- <ContextMenu.Portal><ContextMenu.Content className="mark-menu context-mark-menu" collisionPadding={12} sticky="always" avoidCollisions>{items("context")}</ContextMenu.Content></ContextMenu.Portal>
+ </button></ContextMenu.Trigger>
+ <ContextMenu.Portal><ContextMenu.Content className="mark-menu context-mark-menu" collisionPadding={12} sticky="always" avoidCollisions>{items()}</ContextMenu.Content></ContextMenu.Portal>
  </ContextMenu.Root>;
 }

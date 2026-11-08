@@ -9,11 +9,12 @@ import {useRouter} from "next/navigation";
 import Link from "next/link";
 import {DatePicker} from "./date-picker";
 import {QuickFill} from "./quick-fill";
-import {BookOpen,BookOpenCheck,ListChecks,Plus,Users,LayoutGrid,List,ChevronRight,X,Check,ArrowUpRight,LoaderCircle,Trash2,ClipboardCheck,NotebookPen} from "lucide-react";
+import {BookOpen,BookOpenCheck,ListChecks,Plus,Users,LayoutGrid,List,ChevronRight,X,Check,ArrowUpRight,LoaderCircle,Trash2,ClipboardCheck,NotebookPen,Table2,Maximize,Minimize} from "lucide-react";
 import {AnimatePresence,MotionConfig,motion,useReducedMotion} from "motion/react";
 import {AnimatedDialog,CustomSelect} from "./ui";
 import type {Data,EntryKind,Lesson,Student} from "@/lib/types";
 import {studentNames} from "@/lib/domain.mjs";
+import {GradeSheet} from "./grade-sheet";
 import {JournalGrid} from "./journal-grid";
 import type {MarkEdit} from "./mark-cell";
 import {TagBadge,tagStyle} from "./tag-badge";
@@ -48,7 +49,22 @@ export default function JournalApp({activeJournalId}:{activeJournalId?:number}){
  const [data,setData]=useState<Data>(empty),[loading,setLoading]=useState(true),[error,setError]=useState(""),[busy,setBusy]=useState(false),[saved,setSaved]=useState("");
  const [connected,setConnected]=useState(false);
  const [groupId,setGroupId]=useState<number|null>(null);
- const [view,setView]=useState<"table"|"list">("table"),[modal,setModal]=useState<Modal>(null),[selected,setSelected]=useState<Lesson|null>(null),[dirty,setDirty]=useState(false);
+ const [view,setView]=useState<"table"|"list"|"grades">("table"),[modal,setModal]=useState<Modal>(null),[selected,setSelected]=useState<Lesson|null>(null),[dirty,setDirty]=useState(false);
+ const [expanded,setExpanded]=useState(false);
+ const ownsFullscreen=useRef(false);
+ useEffect(()=>{
+  function sync(){if(ownsFullscreen.current&&!document.fullscreenElement){ownsFullscreen.current=false;setExpanded(false);}}
+  function escape(e:KeyboardEvent){if(e.key==="Escape"&&!document.fullscreenElement)setExpanded(false);}
+  document.addEventListener("fullscreenchange",sync);window.addEventListener("keydown",escape);
+  return()=>{document.removeEventListener("fullscreenchange",sync);window.removeEventListener("keydown",escape);if(ownsFullscreen.current&&document.fullscreenElement===document.documentElement)void document.exitFullscreen().catch(()=>{});};
+ },[]);
+ async function toggleExpanded(){
+  if(expanded){setExpanded(false);if(ownsFullscreen.current&&document.fullscreenElement===document.documentElement)await document.exitFullscreen().catch(()=>{});return;}
+  setExpanded(true);
+  if(!document.fullscreenElement&&document.documentElement.requestFullscreen){
+   try{await document.documentElement.requestFullscreen();ownsFullscreen.current=true;}catch{/* Layout-only fullscreen for tablets without browser fullscreen. */}
+  }
+ }
  const [editingStudent,setEditingStudent]=useState<Student|null>(null);
  const [quickLessonId,setQuickLessonId]=useState<number|null>(null);
  async function reload(){const revision=markQueue.revision;const r=await fetch("/api/journal",{cache:"no-store"});const d=await r.json();if(!r.ok){if(r.status===401)throw new Error("Сессия завершена. Войди в журнал снова.");setConnected(false);throw new Error(d.error);}setConnected(true);kinds.current=new Map(d.lessons.map((l:Lesson)=>[l.id,l.kind]));if(markQueue.revision===revision)markQueue.hydrate(d.marks);setData(d);return d as Data;}
@@ -96,7 +112,7 @@ export default function JournalApp({activeJournalId}:{activeJournalId?:number}){
  function openLesson(l:Lesson){requestDiscard(()=>{setSelected({...l,tags:[...l.tags]});setDirty(false);});}
  function closeLesson(){requestDiscard(()=>{setSelected(null);setDirty(false);});}
  function updateLesson(p:Partial<Lesson>){setSelected(s=>s?{...s,...p}:s);setDirty(true);}
- return <MotionConfig reducedMotion="user"><div className={activeJournalId===undefined?"app catalog-app":"app journal-app"}>
+ return <MotionConfig reducedMotion="user"><div className={activeJournalId===undefined?"app catalog-app":"app journal-app"+(expanded?" journal-expanded":"")}>
 
 
  {activeJournalId===undefined&&<header className="topbar"><a className="site-title" href="/"><BookOpenCheck size={27} className="site-logo" aria-hidden="true"/>Электронный журнал</a><div className="topbar-actions"><LogoutButton/><button className="button secondary" onClick={()=>setModal("group")}><Plus size={18}/> Новая группа</button></div></header>}
@@ -112,9 +128,9 @@ export default function JournalApp({activeJournalId}:{activeJournalId?:number}){
  {activeJournalId!==undefined&&
  <AnimatePresence mode="wait" initial={false}><motion.section className="journal-panel" key={journal?.id??group?.id??"empty"} initial={reduced?{opacity:0}:{opacity:0,y:12}} animate={{opacity:1,y:0}} exit={{opacity:0,y:reduced?0:-6}} transition={{duration:.225}}>
  {journal&&<div className="journal-heading"><div className="journal-identity"><div className="journal-title-row"><h1>{journal.short_name}</h1><span className="group-caption">Группа {group?.name}</span></div><p>{journal.name}</p><div className="journal-subject-switch"><CustomSelect label="Переключить предмет" value={String(journal.id)} options={data.journals.filter(j=>j.group_id===journal.group_id).map(j=>({value:String(j.id),label:j.short_name+" · "+j.name}))} onValueChange={v=>{if(Number(v)!==journal.id)requestDiscard(()=>{setSelected(null);setDirty(false);setQuickLessonId(null);setEntryFilter("all");router.replace("/journals/"+v,{scroll:false});});}}/><Link className="text-button" href="/" scroll={false}><LayoutGrid size={17}/> Все группы</Link></div></div><div className="heading-actions"><LogoutButton/><button className="button secondary" onClick={()=>setModal("students")}><Users size={18}/> Состав группы</button><AddEntryButton onSelect={openCreate}/></div></div>}
- {journal&&<><div className="panel-toolbar"><div className="tabs"><button className={view==="table"?"selected":""} onClick={()=>{setView("table")}}><LayoutGrid size={18}/> Журнал</button><button className={view==="list"?"selected":""} onClick={()=>{setView("list")}}><List size={20}/> Занятия</button></div><div className="table-tools"><button className="button secondary quick-fill-trigger" disabled={!lessons.length||busy||markSync.busy} onClick={()=>openQuickFill(lessons.at(-1)!.id)}><ListChecks size={18}/> Быстрое заполнение</button><span role="status" className="save-state">{busy||markSync.saving?<><LoaderCircle size={16} className="spin"/> Сохраняем…</>:<><Check size={16}/>{markSync.error?"Не сохранено":saved||(connected?"Сохранено":"Нет подключения")}</>}</span></div></div></>}
+ {journal&&<><div className="panel-toolbar"><div className="tabs"><button className={view==="table"?"selected":""} onClick={()=>{setView("table")}}><LayoutGrid size={18}/> Журнал</button><button className={view==="list"?"selected":""} onClick={()=>{setView("list")}}><List size={20}/> Занятия</button><button className={view==="grades"?"selected":""} onClick={()=>setView("grades")}><Table2 size={18}/> Табель оценок</button></div><div className="table-tools"><button type="button" className="icon-button fullscreen-toggle" aria-label={expanded?"Выйти из полноэкранного режима":"На весь экран"} title={expanded?"Выйти из полноэкранного режима":"На весь экран"} aria-pressed={expanded} onClick={()=>void toggleExpanded()}>{expanded?<Minimize size={19}/>:<Maximize size={19}/>}</button>{view==="table"&&<button className="button secondary quick-fill-trigger" disabled={!lessons.length||busy||markSync.busy} onClick={()=>openQuickFill(lessons.at(-1)!.id)}><ListChecks size={18}/> Быстрое заполнение</button>}<span role="status" className="save-state">{busy||markSync.saving?<><LoaderCircle size={16} className="spin"/> Сохраняем…</>:<><Check size={16}/>{markSync.error?"Не сохранено":saved||(connected?"Сохранено":"Нет подключения")}</>}</span></div></div></>}
  <AnimatePresence mode="wait" initial={false}><motion.div className="journal-content" key={view} initial={{opacity:0,y:reduced?0:12}} animate={{opacity:1,y:0}} exit={{opacity:0,y:reduced?0:-8}} transition={{duration:.245}}>
- {loading?<JournalSkeleton/>:!journal?<Empty title="Журнал не найден" text="Возможно, этот журнал больше не существует."><a href="/" className="button secondary">Все группы</a></Empty>:!lessons.length?<Empty title="Здесь появятся занятия" text="Добавь пару, тест или самостоятельную работу."><AddEntryButton onSelect={openCreate}/></Empty>:view==="table"?<JournalGrid lessons={lessons} students={students} marks={markSync.marks} onOpenLesson={openLesson} onQuickFill={openQuickFill} onAddLesson={openCreate} onEditStudent={setEditingStudent} onEditMark={editMark}/>:<div className="lesson-list"><div className="lesson-filter"><CustomSelect label="Фильтр занятий" value={activeFilter} onValueChange={setEntryFilter} options={filters}/></div>{shownLessons.map(l=><button className={"lesson-card"+(l.kind==="lesson"?"":" "+l.kind+"-entry")} key={l.id} onClick={()=>openLesson(l)}><span className="date-tile"><strong>{l.date.slice(8)}</strong>{new Date(l.date+"T12:00").toLocaleDateString("ru",{month:"short"})}</span><div className="lesson-card-content"><small className={l.kind==="lesson"?undefined:l.kind+"-entry-label"}>{l.kind==="test"?<><ClipboardCheck size={16}/>Тест</>:l.kind==="independent"?<><NotebookPen size={16}/>Самостоятельная</>:l.slot+" пара"}</small><h3>{l.title||"Без темы — можно заполнить позже"}</h3><div className="tag-row">{l.tags.map(t=><TagBadge key={t} name={t}/>)}</div></div><ArrowUpRight size={18}/></button>)}{!shownLessons.length&&<p className="no-results">По этому фильтру занятий нет.</p>}</div>}
+ {loading?<JournalSkeleton/>:!journal?<Empty title="Журнал не найден" text="Возможно, этот журнал больше не существует."><a href="/" className="button secondary">Все группы</a></Empty>:view==="grades"?<GradeSheet lessons={lessons} students={students} marks={markSync.marks}/>:!lessons.length?<Empty title="Здесь появятся занятия" text="Добавь пару, тест или самостоятельную работу."><AddEntryButton onSelect={openCreate}/></Empty>:view==="table"?<JournalGrid lessons={lessons} students={students} marks={markSync.marks} onOpenLesson={openLesson} onQuickFill={openQuickFill} onAddLesson={openCreate} onEditStudent={setEditingStudent} onEditMark={editMark}/>:<div className="lesson-list"><div className="lesson-filter"><CustomSelect label="Фильтр занятий" value={activeFilter} onValueChange={setEntryFilter} options={filters}/></div>{shownLessons.map(l=><button className={"lesson-card"+(l.kind==="lesson"?"":" "+l.kind+"-entry")} key={l.id} onClick={()=>openLesson(l)}><span className="date-tile"><strong>{l.date.slice(8)}</strong>{new Date(l.date+"T12:00").toLocaleDateString("ru",{month:"short"})}</span><div className="lesson-card-content"><small className={l.kind==="lesson"?undefined:l.kind+"-entry-label"}>{l.kind==="test"?<><ClipboardCheck size={16}/>Тест</>:l.kind==="independent"?<><NotebookPen size={16}/>Самостоятельная</>:l.slot+" пара"}</small><h3>{l.title||"Без темы — можно заполнить позже"}</h3><div className="tag-row">{l.tags.map(t=><TagBadge key={t} name={t}/>)}</div></div><ArrowUpRight size={18}/></button>)}{!shownLessons.length&&<p className="no-results">По этому фильтру занятий нет.</p>}</div>}
  </motion.div></AnimatePresence>
 
  </motion.section></AnimatePresence>}</motion.main>
