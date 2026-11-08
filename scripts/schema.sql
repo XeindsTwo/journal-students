@@ -53,19 +53,25 @@ CREATE TABLE IF NOT EXISTS auth_attempts(key text PRIMARY KEY,attempts integer N
 -- A single owner account. Passwords are stored only as salted hashes.
 CREATE TABLE IF NOT EXISTS auth_users (id smallint PRIMARY KEY DEFAULT 1 CHECK(id=1),username text NOT NULL UNIQUE CHECK(length(username) BETWEEN 3 AND 100),password_hash text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now());
 
--- Independent test columns
+-- Independent test columns and assignments
 BEGIN;
 ALTER TABLE lessons ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'lesson';
 ALTER TABLE lessons ALTER COLUMN slot DROP NOT NULL;
+ALTER TABLE journals ADD COLUMN IF NOT EXISTS independent_count integer NOT NULL DEFAULT 0;
 ALTER TABLE lessons DROP CONSTRAINT IF EXISTS lessons_kind_check;
-ALTER TABLE lessons ADD CONSTRAINT lessons_kind_check CHECK(kind IN ('lesson','test'));
+ALTER TABLE lessons ADD CONSTRAINT lessons_kind_check CHECK(kind IN ('lesson','test','independent'));
 ALTER TABLE lessons DROP CONSTRAINT IF EXISTS lessons_kind_slot_check;
-ALTER TABLE lessons ADD CONSTRAINT lessons_kind_slot_check CHECK((kind='lesson' AND slot IS NOT NULL AND slot BETWEEN 1 AND 12) OR (kind='test' AND slot IS NULL));
+ALTER TABLE lessons ADD CONSTRAINT lessons_kind_slot_check CHECK((kind='lesson' AND slot IS NOT NULL AND slot BETWEEN 1 AND 12) OR (kind IN ('test','independent') AND slot IS NULL));
 CREATE OR REPLACE FUNCTION enforce_test_mark() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE entry_kind text;
 BEGIN
- IF EXISTS(SELECT 1 FROM lessons WHERE id=NEW.lesson_id AND kind='test') THEN
-  IF cardinality(NEW.grades)>1 THEN RAISE EXCEPTION 'В тесте разрешена только одна оценка' USING ERRCODE='23514'; END IF;
-  IF NEW.attendance NOT IN ('unknown','absent') THEN RAISE EXCEPTION 'В тесте разрешена только отметка Н' USING ERRCODE='23514'; END IF;
+ SELECT kind INTO entry_kind FROM lessons WHERE id=NEW.lesson_id;
+ IF entry_kind='test' THEN
+  IF cardinality(NEW.grades)>1 THEN RAISE EXCEPTION 'Для этой работы разрешена только одна оценка' USING ERRCODE='23514'; END IF;
+  IF NEW.attendance NOT IN ('unknown','absent') THEN RAISE EXCEPTION 'Для этой работы разрешена только отметка Н' USING ERRCODE='23514'; END IF;
+ ELSIF entry_kind='independent' THEN
+  IF cardinality(NEW.grades)>2 THEN RAISE EXCEPTION 'В самостоятельной разрешены две оценки' USING ERRCODE='23514'; END IF;
+  IF NEW.attendance NOT IN ('unknown','present','absent') THEN RAISE EXCEPTION 'Для самостоятельной доступны только отметки Был и Не был' USING ERRCODE='23514'; END IF;
  END IF;
  RETURN NEW;
 END $$;

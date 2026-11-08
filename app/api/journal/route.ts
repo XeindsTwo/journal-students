@@ -9,18 +9,18 @@ export const dynamic = "force-dynamic";
 const id = z.number().int().positive();
 const name = z.string().trim().min(1).max(200);
 const date = z.iso.date();
-const editSchema=z.object({lesson_id:id,student_id:id,operation:z.enum(["add-grade","remove-grade","attendance","toggle-attendance","clear-grades","clear"]),grade:z.number().int().min(2).max(5).optional(),index:z.number().int().min(0).max(99).optional(),attendance:z.enum(["unknown","absent","late"]).optional()});
+const editSchema=z.object({lesson_id:id,student_id:id,operation:z.enum(["add-grade","remove-grade","attendance","toggle-attendance","clear-grades","clear"]),grade:z.number().int().min(2).max(5).optional(),index:z.number().int().min(0).max(99).optional(),attendance:z.enum(["unknown","present","absent","late"]).optional()});
 const schema = z.discriminatedUnion("action", [
  z.object({action:z.literal("mark-operations"),request_id:z.uuid(),operations:z.array(editSchema).min(1).max(1000)}),
  z.object({action:z.literal("group"),name,names:z.array(name).max(100),joined_on:date}),
  z.object({action:z.literal("students"),group_id:id,names:z.array(name).min(1).max(100),joined_on:date}),
  z.object({action:z.literal("student"),id,name,joined_on:date,left_on:date.nullable()}),
  z.object({action:z.literal("journal"),group_id:id,name,short_name:name,period:name}),
- z.object({action:z.literal("lesson"),journal_id:id,date,slot:z.number().int().min(1).max(12).nullable().optional(),kind:z.enum(["lesson","test"]).default("lesson"),title:z.string().max(300)}),
+ z.object({action:z.literal("lesson"),journal_id:id,date,slot:z.number().int().min(1).max(12).nullable().optional(),kind:z.enum(["lesson","test","independent"]).default("lesson"),title:z.string().max(300)}),
  z.object({action:z.literal("lesson-update"),id,date,slot:z.number().int().min(1).max(12).nullable(),title:z.string().max(300),description:z.string().max(20000),tags:z.array(z.string().trim().min(1).max(50)).max(20)}),
  z.object({action:z.literal("mark"),lesson_id:id,student_id:id,attendance:z.enum(["unknown","present","absent","late"]),grade:z.number().int().min(2).max(5).nullable()}),
- z.object({action:z.literal("mark-edit"),lesson_id:id,student_id:id,operation:z.enum(["add-grade","remove-grade","attendance","toggle-attendance","clear-grades","clear"]),grade:z.number().int().min(2).max(5).optional(),index:z.number().int().min(0).max(99).optional(),attendance:z.enum(["unknown","absent","late"]).optional()}),
- z.object({action:z.literal("mark-batch"),lesson_id:id,rows:z.array(z.object({student_id:id,attendance:z.enum(["unknown","absent","late"]).optional(),grade:z.number().int().min(2).max(5).optional()})).min(1).max(500)}),
+ z.object({action:z.literal("mark-edit"),lesson_id:id,student_id:id,operation:z.enum(["add-grade","remove-grade","attendance","toggle-attendance","clear-grades","clear"]),grade:z.number().int().min(2).max(5).optional(),index:z.number().int().min(0).max(99).optional(),attendance:z.enum(["unknown","present","absent","late"]).optional()}),
+ z.object({action:z.literal("mark-batch"),lesson_id:id,rows:z.array(z.object({student_id:id,attendance:z.enum(["unknown","present","absent","late"]).optional(),grade:z.number().int().min(2).max(5).optional()})).min(1).max(500)}),
  z.object({action:z.literal("complete"),lesson_id:id}),
  z.object({action:z.literal("delete-lesson"),id})
 ]);
@@ -87,13 +87,20 @@ export async function POST(req:NextRequest) {
  result=(await client.query("INSERT INTO journals(group_id,name,short_name,period) VALUES($1,$2,$3,$4) RETURNING id",[p.group_id,p.name,p.short_name,p.period])).rows[0];break;
  case "lesson": {
  if(p.kind==="test"&&(!p.title.trim()||p.slot!=null))throw Error("У теста должны быть название и дата, без номера пары");
+ if(p.kind==="independent"&&p.slot!=null)throw Error("Самостоятельная работа не привязана к номеру пары");
  if(p.kind==="lesson"&&p.slot==null)throw Error("Выберите номер пары");
- result=(await client.query("INSERT INTO lessons(journal_id,date,slot,title,kind) VALUES($1,$2,$3,$4,$5) RETURNING id",[p.journal_id,p.date,p.slot??null,p.title.trim(),p.kind])).rows[0];break;
+ let title=p.title.trim();
+ if(p.kind==="independent"){
+  const {rows}=await client.query("UPDATE journals SET independent_count=independent_count+1 WHERE id=$1 RETURNING independent_count",[p.journal_id]);
+  if(!rows.length)throw Error("Предмет не найден");
+  title="Самостоятельная работа №"+rows[0].independent_count;
+ }
+ result=(await client.query("INSERT INTO lessons(journal_id,date,slot,title,kind) VALUES($1,$2,$3,$4,$5) RETURNING id",[p.journal_id,p.date,p.slot??null,title,p.kind])).rows[0];break;
  }
  case "lesson-update": {
- const record=(await client.query("SELECT kind FROM lessons WHERE id=$1 FOR UPDATE",[p.id])).rows[0];if(!record)throw Error("Запись не найдена");
- if(record.kind==="test"&&(!p.title.trim()||p.slot!==null))throw Error("У теста должны быть название и дата, без номера пары");if(record.kind==="lesson"&&p.slot===null)throw Error("Выберите номер пары");
- await client.query("UPDATE lessons SET date=$2,slot=$3,title=$4,description=$5,tags=$6 WHERE id=$1",[p.id,p.date,p.slot,p.title.trim(),p.description,[...new Set(p.tags)]]);break;
+ const record=(await client.query("SELECT kind,title FROM lessons WHERE id=$1 FOR UPDATE",[p.id])).rows[0];if(!record)throw Error("Запись не найдена");
+ if(record.kind==="test"&&(!p.title.trim()||p.slot!==null))throw Error("У теста должны быть название и дата, без номера пары");if(record.kind==="independent"&&p.slot!==null)throw Error("Самостоятельная работа не привязана к номеру пары");if(record.kind==="lesson"&&p.slot===null)throw Error("Выберите номер пары");
+ await client.query("UPDATE lessons SET date=$2,slot=$3,title=$4,description=$5,tags=$6 WHERE id=$1",[p.id,p.date,p.slot,record.kind==="independent"?record.title:p.title.trim(),p.description,[...new Set(p.tags)]]);break;
  }
  case "mark": {
  const valid=await client.query("SELECT 1 FROM students s JOIN journals j ON s.group_id=j.group_id JOIN lessons l ON l.journal_id=j.id WHERE s.id=$1 AND l.id=$2 AND s.joined_on<=l.date AND (s.left_on IS NULL OR s.left_on>l.date)",[p.student_id,p.lesson_id]);
@@ -113,6 +120,7 @@ export async function POST(req:NextRequest) {
 
  case "mark-batch": {
  const kind=(await client.query("SELECT kind FROM lessons WHERE id=$1",[p.lesson_id])).rows[0]?.kind;
+ if(kind!=="independent"&&p.rows.some(row=>row.attendance==="present"))throw Error("Отметка «Был» доступна в самостоятельных работах");
  const ids=p.rows.map(row=>row.student_id);
  if(new Set(ids).size!==ids.length)throw new Error("Студент повторяется в списке");
  if(p.rows.some(row=>row.attendance===undefined&&row.grade===undefined))throw new Error("Есть пустая строка изменений");
@@ -125,7 +133,7 @@ export async function POST(req:NextRequest) {
  break;
  }
  case "complete":
- if((await client.query("SELECT kind FROM lessons WHERE id=$1",[p.lesson_id])).rows[0]?.kind==="test")throw Error("Для теста нет отметки присутствия");
+ if((await client.query("SELECT kind FROM lessons WHERE id=$1",[p.lesson_id])).rows[0]?.kind!=="lesson")throw Error("Отметка присутствия доступна только для пары");
  await client.query("INSERT INTO marks(lesson_id,student_id,attendance) SELECT l.id,s.id,'present' FROM lessons l JOIN journals j ON j.id=l.journal_id JOIN students s ON s.group_id=j.group_id WHERE l.id=$1 AND s.joined_on<=l.date AND (s.left_on IS NULL OR s.left_on>l.date) ON CONFLICT(lesson_id,student_id) DO UPDATE SET attendance=CASE WHEN marks.attendance='unknown' THEN 'present' ELSE marks.attendance END",[p.lesson_id]);
  await client.query("UPDATE lessons SET attendance_checked=true WHERE id=$1",[p.lesson_id]);break;
  case "delete-lesson": await client.query("DELETE FROM lessons WHERE id=$1",[p.id]);break;
