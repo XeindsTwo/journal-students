@@ -208,4 +208,5 @@ tbody tr:hover td{background:#fefefe}
 
 .journal-table th.independent-column{background:#edf5ec;border-color:#dce9dc}.journal-table td.independent-column{background:#f5faf4;border-color:#e3ede3}.independent-icon,.independent-entry-label{color:#4c7654}.independent-entry-label{display:flex;align-items:center;gap:6px}.lesson-card.independent-entry{background:#f6faf5;border-color:#e0ebe0}.independent-entry .date-tile{background:#edf5ec;color:#4c7654}.lesson-filter{display:flex;justify-content:flex-start;margin-bottom:12px}
 
-.present-badge{background:#e9f5e9;color:#35653e}.quick-check.present-badge input:checked+span{background:#e9f5e9;color:#35653e;border-color:#9bbd9c}
+
+.description-toolbar{display:flex;gap:6px}.description-toolbar .button{min-height:34px;padding:4px 11px}.description-preview{white-space:pre-wrap;overflow-wrap:anywhere;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);margin-top:4px}

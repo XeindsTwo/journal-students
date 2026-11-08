@@ -5,7 +5,7 @@ import {Check,Clock,UserX,Eraser,BadgeCheck,CircleAlert,X} from "lucide-react";
 import type {Mark} from "@/lib/types";
 import {useState,type KeyboardEvent,type RefCallback} from "react";
 import {journalKeyAction} from "@/lib/journal-keyboard.mjs";
-export type MarkEdit={operation:"add-grade"|"remove-grade"|"attendance"|"toggle-attendance"|"clear-grades"|"clear";grade?:number;index?:number;attendance?:"unknown"|"present"|"absent"|"late"};
+export type MarkEdit={operation:"add-grade"|"remove-grade"|"attendance"|"toggle-attendance"|"clear-grades"|"clear";grade?:number;index?:number;attendance?:"unknown"|"absent"|"late"};
 type Props={independent?:boolean;isTest?:boolean;mark?:Mark;disabled:boolean;label:string;onEdit:(edit:MarkEdit)=>unknown;cellRef?:RefCallback<HTMLButtonElement>;tabIndex?:number;onFocus?:()=>void;onNavigate?:(row:number,column:number)=>void};
 const choices=[{value:5,Icon:BadgeCheck},{value:4,Icon:BadgeCheck},{value:3,Icon:BadgeCheck},{value:2,Icon:CircleAlert}];
 export function MarkCell({independent=false,isTest=false,mark,disabled,label,onEdit,cellRef,tabIndex,onFocus,onNavigate}:Props){
@@ -26,19 +26,17 @@ export function MarkCell({independent=false,isTest=false,mark,disabled,label,onE
  {choices.map(({value,Icon})=><Item key={value} className="mark-menu-item" disabled={disabled||(!isTest&&grades.length>=(independent?2:100))} onSelect={()=>onEdit({operation:"add-grade",grade:value})}><span className={`mark-indicator grade-${value}`}><Icon size={16}/></span>Поставить {value}</Item>)}
  <Separator className="menu-separator"/>
  <Item className="mark-menu-item" disabled={disabled} onSelect={()=>onEdit({operation:"toggle-attendance",attendance:"absent"})}><span className="mark-indicator absent"><UserX size={16}/></span>{attendance==="absent"?"Убрать Н":independent?"Не был (Н)":"Поставить Н"}{attendance==="absent"&&<Check size={16} className="menu-check"/>}</Item>
- {independent&&<Item className="mark-menu-item" disabled={disabled} onSelect={()=>onEdit({operation:"toggle-attendance",attendance:"present"})}><span className="mark-indicator present-badge"><Check size={16}/></span>{attendance==="present"?"Убрать отметку «Был»":"Был"}</Item>}
  {!isTest&&!independent&&<Item className="mark-menu-item" disabled={disabled} onSelect={()=>onEdit({operation:"toggle-attendance",attendance:"late"})}><span className="mark-indicator late"><Clock size={16}/></span>{attendance==="late"?"Убрать О":"Поставить О"}{attendance==="late"&&<Check size={16} className="menu-check"/>}</Item>}
  {grades.length>0&&<><Separator className="menu-separator"/>{grades.map((grade,index)=><Item key={index} className="mark-menu-item" disabled={disabled} onSelect={()=>onEdit({operation:"remove-grade",grade,index})}><span className={`mark-badge grade-${grade}`}>{grade}</span>{isTest?"Убрать оценку":"Убрать оценку №"+(index+1)}<X size={15} className="menu-check"/></Item>)}</>}
  <Separator className="menu-separator"/>
  <Item className="mark-menu-item" disabled={disabled||grades.length===0} onSelect={()=>onEdit({operation:"clear-grades"})}><Eraser size={16}/>{isTest?"Убрать оценку":"Убрать все оценки"}</Item>
- <Item className="mark-menu-item" disabled={disabled||!(independent?["present","absent"]:["absent","late"]).includes(attendance)} onSelect={()=>onEdit({operation:"attendance",attendance:"unknown"})}><Eraser size={16}/>{isTest?"Убрать Н":"Убрать Н / О"}</Item>
+ <Item className="mark-menu-item" disabled={disabled||!(independent?["absent"]:["absent","late"]).includes(attendance)} onSelect={()=>onEdit({operation:"attendance",attendance:"unknown"})}><Eraser size={16}/>{(isTest||independent)?"Убрать Н":"Убрать Н / О"}</Item>
  <Item className="mark-menu-item" disabled={disabled} onSelect={()=>onEdit({operation:"clear"})}><Eraser size={16}/>Очистить ячейку</Item>
  </>;
  }
  return <ContextMenu.Root><DropdownMenu.Root open={dropdownOpen} onOpenChange={setDropdownOpen}>
  <ContextMenu.Trigger asChild disabled={disabled}><DropdownMenu.Trigger asChild disabled={disabled}>
  <button ref={cellRef} tabIndex={tabIndex} onFocus={onFocus} onKeyDownCapture={keyboard} className="mark-cell" aria-label={label} aria-keyshortcuts={"ArrowUp ArrowDown ArrowLeft ArrowRight Enter 2 3 4 5 N"+((isTest||independent)?"":" O")}>
- {independent&&attendance==="present"&&<span className="mark-badge present-badge" title="Был"><Check size={15}/></span>}
  {attendance==="absent"&&<span className="mark-badge absent">Н</span>}
  {attendance==="late"&&<span className="mark-badge late">О</span>}
  {grades.map((grade,index)=><span key={index} className={`mark-badge grade-${grade}`}>{grade}</span>)}

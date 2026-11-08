@@ -6,7 +6,7 @@ import {AnimatedDialog,CustomSelect} from "./ui";
 import type {Lesson,Student,Mark} from "@/lib/types";
 import {activeOn} from "@/lib/domain.mjs";
 
-type Draft={grade?:string;attendance?:"unknown"|"present"|"absent"|"late"};
+type Draft={grade?:string;attendance?:"unknown"|"absent"|"late"};
 export function QuickFill({initialLessonId,lessons,students,marks,onSaved,onClose}:{initialLessonId:number;lessons:Lesson[];students:Student[];marks:Mark[];onSaved:(marks:Mark[])=>Promise<void>;onClose:()=>void}){
  const [lessonId,setLessonId]=useState(initialLessonId),[drafts,setDrafts]=useState<Record<number,Draft>>({});
  const [saving,setSaving]=useState(false),[error,setError]=useState(""),[discard,setDiscard]=useState(false),[changeTarget,setChangeTarget]=useState<number|null>(null);
@@ -62,11 +62,10 @@ export function QuickFill({initialLessonId,lessons,students,marks,onSaved,onClos
  return <><AnimatedDialog label="Быстрое заполнение" wide onClose={requestClose}>
  <header><div><h2>Быстрое заполнение</h2><p className="quick-fill-subtitle">{(isTest||independent)?"Одна работа · Enter — следующий студент":"Одна пара · Enter — следующий студент"}</p></div><button className="icon-button" aria-label="Закрыть быстрое заполнение" disabled={saving||retryLocked} onClick={requestClose}><X/></button></header>
  <div className="quick-fill-controls"><CustomSelect label="Запись для быстрого заполнения" value={String(lessonId)} disabled={saving||retryLocked} onValueChange={v=>selectLesson(Number(v))} options={lessons.map(l=>({value:String(l.id),label:new Date(l.date+"T12:00:00").toLocaleDateString("ru",{day:"numeric",month:"long"})+" · "+(l.kind==="test"?"Тест":l.kind==="independent"?"Самостоятельная":l.slot+" пара")+(l.title?" · "+l.title:"")}))}/></div>
- <div className="quick-fill-table-scroll"><table className="quick-fill-table"><thead><tr><th>Студент</th><th>{independent?"Не был":"Н"}</th>{independent&&<th>Был</th>}{!isTest&&!independent&&<th>О</th>}<th>Оценка</th></tr></thead><tbody>{roster.map((student,index)=>{
+ <div className="quick-fill-table-scroll"><table className="quick-fill-table"><thead><tr><th>Студент</th><th>Н</th>{!isTest&&!independent&&<th>О</th>}<th>Оценка</th></tr></thead><tbody>{roster.map((student,index)=>{
  const mark=markFor(student.id),draft=drafts[student.id],attendance=draft?.attendance??mark?.attendance??"unknown";
  return <tr key={student.id}><td><span className="quick-row-number">{String(index+1).padStart(2,"0")}</span>{student.name}</td>
  <td><label className="quick-check absent"><input type="checkbox" disabled={saving||retryLocked} checked={attendance==="absent"} aria-label={"Н: "+student.name} onChange={e=>setDraft(student.id,{attendance:e.target.checked?"absent":"unknown"})}/><span><Check size={15}/></span></label></td>
- {independent&&<td><label className="quick-check present-badge"><input type="checkbox" disabled={saving||retryLocked} checked={attendance==="present"} aria-label={"Был: "+student.name} onChange={e=>setDraft(student.id,{attendance:e.target.checked?"present":"unknown"})}/><span><Check size={15}/></span></label></td>}
  {!isTest&&!independent&&<td><label className="quick-check late"><input type="checkbox" disabled={saving||retryLocked} checked={attendance==="late"} aria-label={"О: "+student.name} onChange={e=>setDraft(student.id,{attendance:e.target.checked?"late":"unknown"})}/><span><Check size={15}/></span></label></td>}
  <td><div className="quick-grade-field"><input ref={element=>{fields.current[student.id]=element;}} aria-label={"Оценка: "+student.name} autoComplete="off" inputMode="numeric" type="text" pattern="[2-5]" maxLength={1} disabled={saving||retryLocked} readOnly={independent&&(mark?.grades?.length??0)>=2} placeholder="—" value={draft?.grade??""} onChange={e=>{const value=e.target.value;if(/^[2-5]?$/.test(value))setDraft(student.id,{grade:value});else setError("Оценка должна быть от 2 до 5");}} onKeyDown={e=>nextStudent(e,index)}/>
  {(mark?.grades?.length??0)>0&&<span className="existing-grades" aria-label={"Уже выставлено: "+mark!.grades.join(", ")}>{mark!.grades.map((grade,i)=><span key={i} className={"mark-badge grade-"+grade}>{grade}</span>)}</span>}</div></td></tr>;

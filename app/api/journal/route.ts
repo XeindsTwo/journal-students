@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 const id = z.number().int().positive();
 const name = z.string().trim().min(1).max(200);
 const date = z.iso.date();
-const editSchema=z.object({lesson_id:id,student_id:id,operation:z.enum(["add-grade","remove-grade","attendance","toggle-attendance","clear-grades","clear"]),grade:z.number().int().min(2).max(5).optional(),index:z.number().int().min(0).max(99).optional(),attendance:z.enum(["unknown","present","absent","late"]).optional()});
+const editSchema=z.object({lesson_id:id,student_id:id,operation:z.enum(["add-grade","remove-grade","attendance","toggle-attendance","clear-grades","clear"]),grade:z.number().int().min(2).max(5).optional(),index:z.number().int().min(0).max(99).optional(),attendance:z.enum(["unknown","absent","late"]).optional()});
 const schema = z.discriminatedUnion("action", [
  z.object({action:z.literal("mark-operations"),request_id:z.uuid(),operations:z.array(editSchema).min(1).max(1000)}),
  z.object({action:z.literal("group"),name,names:z.array(name).max(100),joined_on:date}),
@@ -19,8 +19,8 @@ const schema = z.discriminatedUnion("action", [
  z.object({action:z.literal("lesson"),journal_id:id,date,slot:z.number().int().min(1).max(12).nullable().optional(),kind:z.enum(["lesson","test","independent"]).default("lesson"),title:z.string().max(300)}),
  z.object({action:z.literal("lesson-update"),id,date,slot:z.number().int().min(1).max(12).nullable(),title:z.string().max(300),description:z.string().max(20000),tags:z.array(z.string().trim().min(1).max(50)).max(20)}),
  z.object({action:z.literal("mark"),lesson_id:id,student_id:id,attendance:z.enum(["unknown","present","absent","late"]),grade:z.number().int().min(2).max(5).nullable()}),
- z.object({action:z.literal("mark-edit"),lesson_id:id,student_id:id,operation:z.enum(["add-grade","remove-grade","attendance","toggle-attendance","clear-grades","clear"]),grade:z.number().int().min(2).max(5).optional(),index:z.number().int().min(0).max(99).optional(),attendance:z.enum(["unknown","present","absent","late"]).optional()}),
- z.object({action:z.literal("mark-batch"),lesson_id:id,rows:z.array(z.object({student_id:id,attendance:z.enum(["unknown","present","absent","late"]).optional(),grade:z.number().int().min(2).max(5).optional()})).min(1).max(500)}),
+ z.object({action:z.literal("mark-edit"),lesson_id:id,student_id:id,operation:z.enum(["add-grade","remove-grade","attendance","toggle-attendance","clear-grades","clear"]),grade:z.number().int().min(2).max(5).optional(),index:z.number().int().min(0).max(99).optional(),attendance:z.enum(["unknown","absent","late"]).optional()}),
+ z.object({action:z.literal("mark-batch"),lesson_id:id,rows:z.array(z.object({student_id:id,attendance:z.enum(["unknown","absent","late"]).optional(),grade:z.number().int().min(2).max(5).optional()})).min(1).max(500)}),
  z.object({action:z.literal("complete"),lesson_id:id}),
  z.object({action:z.literal("delete-lesson"),id})
 ]);
@@ -34,7 +34,13 @@ export async function GET() {
  db.query("SELECT *, to_char(date,'YYYY-MM-DD') AS date FROM lessons ORDER BY lessons.date,slot NULLS LAST,id"),
  db.query("SELECT m.*,l.kind FROM marks m JOIN lessons l ON l.id=m.lesson_id")
  ]);
- return NextResponse.json({groups:groups.rows,students:students.rows,journals:journals.rows,lessons:lessons.rows,marks:marks.rows},{headers:{"Cache-Control":"private, no-store"}});
+ const numbers=new Map<number,number>();
+ const entries=lessons.rows.map(row=>{
+  if(row.kind!=="independent")return row;
+  const n=(numbers.get(row.journal_id)??0)+1;numbers.set(row.journal_id,n);
+  return {...row,title:"Самостоятельная работа №"+n};
+ });
+ return NextResponse.json({groups:groups.rows,students:students.rows,journals:journals.rows,lessons:entries,marks:marks.rows},{headers:{"Cache-Control":"private, no-store"}});
  } catch(e) {console.error("Journal database error", (e as Error).message); return NextResponse.json({error:"База недоступна. Запустите PostgreSQL через start.ps1."},{status:503});}
 }
 export async function POST(req:NextRequest) {
@@ -89,12 +95,7 @@ export async function POST(req:NextRequest) {
  if(p.kind==="test"&&(!p.title.trim()||p.slot!=null))throw Error("У теста должны быть название и дата, без номера пары");
  if(p.kind==="independent"&&p.slot!=null)throw Error("Самостоятельная работа не привязана к номеру пары");
  if(p.kind==="lesson"&&p.slot==null)throw Error("Выберите номер пары");
- let title=p.title.trim();
- if(p.kind==="independent"){
-  const {rows}=await client.query("UPDATE journals SET independent_count=independent_count+1 WHERE id=$1 RETURNING independent_count",[p.journal_id]);
-  if(!rows.length)throw Error("Предмет не найден");
-  title="Самостоятельная работа №"+rows[0].independent_count;
- }
+ const title=p.kind==="independent"?"Самостоятельная работа":p.title.trim();
  result=(await client.query("INSERT INTO lessons(journal_id,date,slot,title,kind) VALUES($1,$2,$3,$4,$5) RETURNING id",[p.journal_id,p.date,p.slot??null,title,p.kind])).rows[0];break;
  }
  case "lesson-update": {
@@ -120,7 +121,6 @@ export async function POST(req:NextRequest) {
 
  case "mark-batch": {
  const kind=(await client.query("SELECT kind FROM lessons WHERE id=$1",[p.lesson_id])).rows[0]?.kind;
- if(kind!=="independent"&&p.rows.some(row=>row.attendance==="present"))throw Error("Отметка «Был» доступна в самостоятельных работах");
  const ids=p.rows.map(row=>row.student_id);
  if(new Set(ids).size!==ids.length)throw new Error("Студент повторяется в списке");
  if(p.rows.some(row=>row.attendance===undefined&&row.grade===undefined))throw new Error("Есть пустая строка изменений");
