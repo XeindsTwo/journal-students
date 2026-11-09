@@ -6,7 +6,7 @@ import {AnimatedDialog,CustomSelect} from "./ui";
 import type {Lesson,Student,Mark} from "@/lib/types";
 import {activeOn} from "@/lib/domain.mjs";
 
-type Draft={grade?:string;attendance?:"unknown"|"absent"|"late"};
+type Draft={overdue?:boolean;grade?:string;attendance?:"unknown"|"absent"|"late"};
 export function QuickFill({initialLessonId,lessons,students,marks,onSaved,onClose}:{initialLessonId:number;lessons:Lesson[];students:Student[];marks:Mark[];onSaved:(marks:Mark[])=>Promise<void>;onClose:()=>void}){
  const [lessonId,setLessonId]=useState(initialLessonId),[drafts,setDrafts]=useState<Record<number,Draft>>({});
  const [saving,setSaving]=useState(false),[error,setError]=useState(""),[discard,setDiscard]=useState(false),[changeTarget,setChangeTarget]=useState<number|null>(null);
@@ -14,13 +14,14 @@ export function QuickFill({initialLessonId,lessons,students,marks,onSaved,onClos
  const request=useRef<{key:string;id:string}|null>(null);
  const fields=useRef<Record<number,HTMLInputElement|null>>({});
  const lesson=lessons.find(l=>l.id===lessonId);
- const isTest=lesson?.kind==="test", independent=lesson?.kind==="independent";
+ const practice=lesson?.kind==="practice", isTest=lesson?.kind==="test"||practice, independent=lesson?.kind==="independent";
  const roster=students.filter(s=>lesson&&activeOn(s,lesson.date));
  const rows=roster.flatMap(s=>{const d=drafts[s.id];if(!d)return [];
- const row:{student_id:number;grade?:number;attendance?:Draft["attendance"]}={student_id:s.id};
+ const row:{student_id:number;overdue?:boolean;grade?:number;attendance?:Draft["attendance"]}={student_id:s.id};
+ if(d.overdue!==undefined)row.overdue=d.overdue;
  if(d.grade)row.grade=Number(d.grade);
  if(d.attendance!==undefined)row.attendance=d.attendance;
- return row.grade===undefined&&row.attendance===undefined?[]:[row];});
+ return row.grade===undefined&&row.attendance===undefined&&row.overdue===undefined?[]:[row];});
  const dirty=rows.length>0;
  const markFor=(id:number)=>marks.find(m=>m.lesson_id===lessonId&&m.student_id===id);
  function setDraft(id:number,patch:Draft){setError("");setDrafts(d=>({...d,[id]:{...d[id],...patch}}));}
@@ -49,7 +50,7 @@ export function QuickFill({initialLessonId,lessons,students,marks,onSaved,onClos
  async function save(){
  if(!dirty||saving)return;setSaving(true);setError("");
  try{
- const operations=rows.flatMap(row=>[...(row.attendance===undefined?[]:[{lesson_id:lessonId,student_id:row.student_id,operation:"attendance",attendance:row.attendance}]),...(row.grade===undefined?[]:[{lesson_id:lessonId,student_id:row.student_id,operation:"add-grade",grade:row.grade}])]);
+ const operations=rows.flatMap(row=>[...(row.overdue===undefined?[]:[{lesson_id:lessonId,student_id:row.student_id,operation:"overdue",overdue:row.overdue}]),...(row.attendance===undefined?[]:[{lesson_id:lessonId,student_id:row.student_id,operation:"attendance",attendance:row.attendance}]),...(row.grade===undefined?[]:[{lesson_id:lessonId,student_id:row.student_id,operation:"add-grade",grade:row.grade}])]);
  const key=JSON.stringify(operations);if(request.current?.key!==key)request.current={key,id:crypto.randomUUID()};
  setRetryLocked(true);
  const res=await fetch("/api/journal",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"mark-operations",request_id:request.current.id,operations}),signal:AbortSignal.timeout(15000)});
@@ -61,12 +62,13 @@ export function QuickFill({initialLessonId,lessons,students,marks,onSaved,onClos
  }
  return <><AnimatedDialog label="Быстрое заполнение" wide onClose={requestClose}>
  <header><div><h2>Быстрое заполнение</h2><p className="quick-fill-subtitle">{(isTest||independent)?"Одна работа · Enter — следующий студент":"Одна пара · Enter — следующий студент"}</p></div><button className="icon-button" aria-label="Закрыть быстрое заполнение" disabled={saving||retryLocked} onClick={requestClose}><X/></button></header>
- <div className="quick-fill-controls"><CustomSelect label="Запись для быстрого заполнения" value={String(lessonId)} disabled={saving||retryLocked} onValueChange={v=>selectLesson(Number(v))} options={lessons.map(l=>({value:String(l.id),label:new Date(l.date+"T12:00:00").toLocaleDateString("ru",{day:"numeric",month:"long"})+" · "+(l.kind==="test"?"Тест":l.kind==="independent"?"Самостоятельная":l.slot+" пара")+(l.title?" · "+l.title:"")}))}/></div>
- <div className="quick-fill-table-scroll"><table className="quick-fill-table"><thead><tr><th>Студент</th><th>Н</th>{!isTest&&!independent&&<th>О</th>}<th>Оценка</th></tr></thead><tbody>{roster.map((student,index)=>{
+ <div className="quick-fill-controls"><CustomSelect label="Запись для быстрого заполнения" value={String(lessonId)} disabled={saving||retryLocked} onValueChange={v=>selectLesson(Number(v))} options={lessons.map(l=>({value:String(l.id),label:new Date(l.date+"T12:00:00").toLocaleDateString("ru",{day:"numeric",month:"long"})+" · "+(l.kind==="practice"?"П.р. №"+l.practice_no:l.kind==="test"?"Тест":l.kind==="independent"?"Самостоятельная":l.slot+" пара")+(l.title?" · "+l.title:"")}))}/></div>
+ <div className="quick-fill-table-scroll"><table className="quick-fill-table"><thead><tr><th>Студент</th><th>Н</th>{!isTest&&!independent&&<th>О</th>}{practice&&<th>Просрочка</th>}<th>Оценка</th></tr></thead><tbody>{roster.map((student,index)=>{
  const mark=markFor(student.id),draft=drafts[student.id],attendance=draft?.attendance??mark?.attendance??"unknown";
  return <tr key={student.id}><td><span className="quick-row-number">{String(index+1).padStart(2,"0")}</span>{student.name}</td>
  <td><label className="quick-check absent"><input type="checkbox" disabled={saving||retryLocked} checked={attendance==="absent"} aria-label={"Н: "+student.name} onChange={e=>setDraft(student.id,{attendance:e.target.checked?"absent":"unknown"})}/><span><Check size={15}/></span></label></td>
  {!isTest&&!independent&&<td><label className="quick-check late"><input type="checkbox" disabled={saving||retryLocked} checked={attendance==="late"} aria-label={"О: "+student.name} onChange={e=>setDraft(student.id,{attendance:e.target.checked?"late":"unknown"})}/><span><Check size={15}/></span></label></td>}
+ {practice&&<td><label className="quick-check late"><input type="checkbox" disabled={saving||retryLocked} checked={draft?.overdue??mark?.overdue??false} aria-label={"Не сдал в срок: "+student.name} onChange={e=>setDraft(student.id,{overdue:e.target.checked})}/><span><Check size={15}/></span></label></td>}
  <td><div className="quick-grade-field"><input ref={element=>{fields.current[student.id]=element;}} aria-label={"Оценка: "+student.name} autoComplete="off" inputMode="numeric" type="text" pattern="[2-5]" maxLength={1} disabled={saving||retryLocked} readOnly={independent&&(mark?.grades?.length??0)>=2} placeholder="—" value={draft?.grade??""} onChange={e=>{const value=e.target.value;if(/^[2-5]?$/.test(value))setDraft(student.id,{grade:value});else setError("Оценка должна быть от 2 до 5");}} onKeyDown={e=>nextStudent(e,index)}/>
  {(mark?.grades?.length??0)>0&&<span className="existing-grades" aria-label={"Уже выставлено: "+mark!.grades.join(", ")}>{mark!.grades.map((grade,i)=><span key={i} className={"mark-badge grade-"+grade}>{grade}</span>)}</span>}</div></td></tr>;
  })}</tbody></table>{roster.length===0&&<p className="no-results">На эту дату в группе нет студентов.</p>}</div>

@@ -9,17 +9,18 @@ export const dynamic = "force-dynamic";
 const id = z.number().int().positive();
 const name = z.string().trim().min(1).max(200);
 const date = z.iso.date();
-const editSchema=z.object({lesson_id:id,student_id:id,operation:z.enum(["add-grade","remove-grade","attendance","toggle-attendance","clear-grades","clear"]),grade:z.number().int().min(2).max(5).optional(),index:z.number().int().min(0).max(99).optional(),attendance:z.enum(["unknown","absent","late"]).optional()});
+const practiceNo=z.number().int().min(1).max(9999).nullable().optional();
+const editSchema=z.object({lesson_id:id,student_id:id,operation:z.enum(["add-grade","remove-grade","attendance","toggle-attendance","clear-grades","clear","overdue"]),grade:z.number().int().min(2).max(5).optional(),index:z.number().int().min(0).max(99).optional(),overdue:z.boolean().optional(),attendance:z.enum(["unknown","absent","late"]).optional()});
 const schema = z.discriminatedUnion("action", [
  z.object({action:z.literal("mark-operations"),request_id:z.uuid(),operations:z.array(editSchema).min(1).max(1000)}),
  z.object({action:z.literal("group"),name,names:z.array(name).max(100),joined_on:date}),
  z.object({action:z.literal("students"),group_id:id,names:z.array(name).min(1).max(100),joined_on:date}),
  z.object({action:z.literal("student"),id,name,joined_on:date,left_on:date.nullable()}),
  z.object({action:z.literal("journal"),group_id:id,name,short_name:name,period:name}),
- z.object({action:z.literal("lesson"),journal_id:id,date,slot:z.number().int().min(1).max(12).nullable().optional(),kind:z.enum(["lesson","test","independent"]).default("lesson"),title:z.string().max(300)}),
- z.object({action:z.literal("lesson-update"),id,date,slot:z.number().int().min(1).max(12).nullable(),title:z.string().max(300),description:z.string().max(20000),tags:z.array(z.string().trim().min(1).max(50)).max(20)}),
+ z.object({action:z.literal("lesson"),journal_id:id,date,slot:z.number().int().min(1).max(12).nullable().optional(),practice_no:practiceNo,kind:z.enum(["lesson","test","independent","practice"]).default("lesson"),title:z.string().max(300)}),
+ z.object({action:z.literal("lesson-update"),id,date,practice_no:practiceNo,slot:z.number().int().min(1).max(12).nullable(),title:z.string().max(300),description:z.string().max(20000),tags:z.array(z.string().trim().min(1).max(50)).max(20)}),
  z.object({action:z.literal("mark"),lesson_id:id,student_id:id,attendance:z.enum(["unknown","present","absent","late"]),grade:z.number().int().min(2).max(5).nullable()}),
- z.object({action:z.literal("mark-edit"),lesson_id:id,student_id:id,operation:z.enum(["add-grade","remove-grade","attendance","toggle-attendance","clear-grades","clear"]),grade:z.number().int().min(2).max(5).optional(),index:z.number().int().min(0).max(99).optional(),attendance:z.enum(["unknown","absent","late"]).optional()}),
+ z.object({action:z.literal("mark-edit"),lesson_id:id,student_id:id,operation:z.enum(["add-grade","remove-grade","attendance","toggle-attendance","clear-grades","clear","overdue"]),grade:z.number().int().min(2).max(5).optional(),index:z.number().int().min(0).max(99).optional(),overdue:z.boolean().optional(),attendance:z.enum(["unknown","absent","late"]).optional()}),
  z.object({action:z.literal("mark-batch"),lesson_id:id,rows:z.array(z.object({student_id:id,attendance:z.enum(["unknown","absent","late"]).optional(),grade:z.number().int().min(2).max(5).optional()})).min(1).max(500)}),
  z.object({action:z.literal("complete"),lesson_id:id}),
  z.object({action:z.literal("delete-lesson"),id})
@@ -73,7 +74,7 @@ export async function POST(req:NextRequest) {
  changed.set(key.lesson_id+":"+key.student_id,row);
  }
  for(const operation of p.operations){const key=operation.lesson_id+":"+operation.student_id;changed.set(key,applyMark(changed.get(key),operation));}
- for(const mark of changed.values())await client.query("UPDATE marks SET grades=$3,grade=$4,attendance=$5 WHERE lesson_id=$1 AND student_id=$2",[mark.lesson_id,mark.student_id,mark.grades,mark.grade,mark.attendance]);
+ for(const mark of changed.values())await client.query("UPDATE marks SET grades=$3,grade=$4,attendance=$5,overdue=$6 WHERE lesson_id=$1 AND student_id=$2",[mark.lesson_id,mark.student_id,mark.grades,mark.grade,mark.attendance,mark.overdue??false]);
  result={marks:[...changed.values()]};
  await client.query("INSERT INTO mutation_receipts(request_id,digest,response) VALUES($1,$2,$3)",[p.request_id,digest,JSON.stringify(result)]);
  break;
@@ -94,14 +95,16 @@ export async function POST(req:NextRequest) {
  case "lesson": {
  if(p.kind==="test"&&(!p.title.trim()||p.slot!=null))throw Error("У теста должны быть название и дата, без номера пары");
  if(p.kind==="independent"&&p.slot!=null)throw Error("Самостоятельная работа не привязана к номеру пары");
+ if(p.kind==="practice"&&(p.slot!=null||p.practice_no==null||!p.title.trim()))throw Error("Укажите номер и тему практической");
  if(p.kind==="lesson"&&p.slot==null)throw Error("Выберите номер пары");
  const title=p.kind==="independent"?"Самостоятельная работа":p.title.trim();
- result=(await client.query("INSERT INTO lessons(journal_id,date,slot,title,kind) VALUES($1,$2,$3,$4,$5) RETURNING id",[p.journal_id,p.date,p.slot??null,title,p.kind])).rows[0];break;
+ result=(await client.query("INSERT INTO lessons(journal_id,date,slot,title,kind,practice_no) VALUES($1,$2,$3,$4,$5,$6) RETURNING id",[p.journal_id,p.date,p.slot??null,title,p.kind,p.kind==="practice"?p.practice_no:null])).rows[0];break;
  }
  case "lesson-update": {
  const record=(await client.query("SELECT kind,title FROM lessons WHERE id=$1 FOR UPDATE",[p.id])).rows[0];if(!record)throw Error("Запись не найдена");
  if(record.kind==="test"&&(!p.title.trim()||p.slot!==null))throw Error("У теста должны быть название и дата, без номера пары");if(record.kind==="independent"&&p.slot!==null)throw Error("Самостоятельная работа не привязана к номеру пары");if(record.kind==="lesson"&&p.slot===null)throw Error("Выберите номер пары");
- await client.query("UPDATE lessons SET date=$2,slot=$3,title=$4,description=$5,tags=$6 WHERE id=$1",[p.id,p.date,p.slot,record.kind==="independent"?record.title:p.title.trim(),p.description,[...new Set(p.tags)]]);break;
+ if(record.kind==="practice"&&(p.slot!==null||p.practice_no==null||!p.title.trim()))throw Error("Укажите номер и тему практической");
+ await client.query("UPDATE lessons SET date=$2,slot=$3,title=$4,description=$5,tags=$6,practice_no=$7 WHERE id=$1",[p.id,p.date,p.slot,record.kind==="independent"?record.title:p.title.trim(),p.description,[...new Set(p.tags)],record.kind==="practice"?p.practice_no:null]);break;
  }
  case "mark": {
  const valid=await client.query("SELECT 1 FROM students s JOIN journals j ON s.group_id=j.group_id JOIN lessons l ON l.journal_id=j.id WHERE s.id=$1 AND l.id=$2 AND s.joined_on<=l.date AND (s.left_on IS NULL OR s.left_on>l.date)",[p.student_id,p.lesson_id]);
@@ -115,7 +118,7 @@ export async function POST(req:NextRequest) {
  await client.query("INSERT INTO marks(lesson_id,student_id) VALUES($1,$2) ON CONFLICT DO NOTHING",[p.lesson_id,p.student_id]);
  const row=(await client.query("SELECT m.*,l.kind FROM marks m JOIN lessons l ON l.id=m.lesson_id WHERE m.lesson_id=$1 AND m.student_id=$2 FOR UPDATE OF m",[p.lesson_id,p.student_id])).rows[0];
  const updated=applyMark(row,p);
- await client.query("UPDATE marks SET grades=$3,grade=$4,attendance=$5 WHERE lesson_id=$1 AND student_id=$2",[p.lesson_id,p.student_id,updated.grades,updated.grade,updated.attendance]);
+ await client.query("UPDATE marks SET grades=$3,grade=$4,attendance=$5,overdue=$6 WHERE lesson_id=$1 AND student_id=$2",[p.lesson_id,p.student_id,updated.grades,updated.grade,updated.attendance,updated.overdue??false]);
  break;
  }
 
@@ -127,7 +130,7 @@ export async function POST(req:NextRequest) {
  const valid=await client.query("SELECT s.id FROM students s JOIN journals j ON s.group_id=j.group_id JOIN lessons l ON l.journal_id=j.id WHERE s.id=ANY($1::int[]) AND l.id=$2 AND s.joined_on<=l.date AND (s.left_on IS NULL OR s.left_on>l.date)",[ids,p.lesson_id]);
  if(valid.rowCount!==ids.length)throw new Error("Состав группы изменился. Обновите список студентов");
  for(const row of [...p.rows].sort((a,b)=>a.student_id-b.student_id)){
- await client.query("INSERT INTO marks(lesson_id,student_id,attendance,grade,grades) VALUES($1,$2,COALESCE($3::text,'unknown'),$4::int,CASE WHEN $4::int IS NULL THEN '{}'::int[] ELSE ARRAY[$4::int] END) ON CONFLICT(lesson_id,student_id) DO UPDATE SET attendance=COALESCE($3::text,marks.attendance),grade=COALESCE($4::int,marks.grade),grades=CASE WHEN $4::int IS NULL THEN marks.grades ELSE CASE WHEN $5::boolean THEN ARRAY[$4::int] ELSE array_append(marks.grades,$4::int) END END",[p.lesson_id,row.student_id,row.attendance??null,row.grade??null,kind==="test"]);
+ await client.query("INSERT INTO marks(lesson_id,student_id,attendance,grade,grades) VALUES($1,$2,COALESCE($3::text,'unknown'),$4::int,CASE WHEN $4::int IS NULL THEN '{}'::int[] ELSE ARRAY[$4::int] END) ON CONFLICT(lesson_id,student_id) DO UPDATE SET attendance=COALESCE($3::text,marks.attendance),grade=COALESCE($4::int,marks.grade),grades=CASE WHEN $4::int IS NULL THEN marks.grades ELSE CASE WHEN $5::boolean THEN ARRAY[$4::int] ELSE array_append(marks.grades,$4::int) END END",[p.lesson_id,row.student_id,row.attendance??null,row.grade??null,kind==="test"||kind==="practice"]);
  }
  result={updated:p.rows.length};
  break;
@@ -142,7 +145,7 @@ export async function POST(req:NextRequest) {
  } catch(e) {
  await client.query("ROLLBACK");
  const error=e as Error & {code?:string};
- const message=error.code==="23505"?"Пара с этой датой и номером уже существует":error.code==="23514"?"Проверьте даты и значения полей":error.code?"Не удалось сохранить запись":error.message;
+ const message=error.code==="23505"?(("constraint" in error&&error.constraint==="lessons_practice_no_unique")?"Практическая с таким номером уже есть в предмете":"Пара с этой датой и номером уже существует"):error.code==="23514"?"Проверьте даты и значения полей":error.code?"Не удалось сохранить запись":error.message;
  return NextResponse.json({error:message},{status:400});
  } finally {client.release();}
 }

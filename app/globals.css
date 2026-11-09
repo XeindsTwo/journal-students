@@ -258,3 +258,5 @@ tbody tr:hover td{background:#fefefe}
  .journal-grid :is(th,td).student-col{width:144px;min-width:144px;max-width:144px}
  .grade-sheet .sheet-name{width:120px;min-width:120px;max-width:120px}
 }
+
+.journal-table th.practice-column,.grade-sheet thead th.practice-column{background:#e9f4fc}.journal-table td.practice-column,.lesson-card.practice-entry{background:#f2f8fd}.practice-icon,.practice-entry-label{color:#39749a}.practice-entry-label{display:flex;align-items:center;gap:6px}.practice-entry .date-tile{background:#e9f4fc;color:#39749a}.overdue-badge{background:#fff2da;color:#85520b}
