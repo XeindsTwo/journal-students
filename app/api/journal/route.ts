@@ -32,7 +32,7 @@ export async function GET() {
  db.query("SELECT * FROM groups ORDER BY name"),
  db.query("SELECT *, to_char(joined_on,'YYYY-MM-DD') AS joined_on, to_char(left_on,'YYYY-MM-DD') AS left_on FROM students ORDER BY name"),
  db.query("SELECT * FROM journals ORDER BY id"),
- db.query("SELECT *, to_char(date,'YYYY-MM-DD') AS date FROM lessons ORDER BY lessons.date,slot NULLS LAST,id"),
+ db.query("SELECT *, to_char(date,'YYYY-MM-DD') AS date FROM lessons ORDER BY lessons.date,slot NULLS LAST,(kind<>'lesson'),id"),
  db.query("SELECT m.*,l.kind FROM marks m JOIN lessons l ON l.id=m.lesson_id")
  ]);
  const numbers=new Map<number,number>();
@@ -95,7 +95,7 @@ export async function POST(req:NextRequest) {
  case "lesson": {
  if(p.kind==="test"&&(!p.title.trim()||p.slot!=null))throw Error("У теста должны быть название и дата, без номера пары");
  if(p.kind==="independent"&&p.slot!=null)throw Error("Самостоятельная работа не привязана к номеру пары");
- if(p.kind==="practice"&&(p.slot!=null||p.practice_no==null||!p.title.trim()))throw Error("Укажите номер и тему практической");
+ if(p.kind==="practice"&&(p.practice_no==null||!p.title.trim()))throw Error("Укажите номер и тему практической");
  if(p.kind==="lesson"&&p.slot==null)throw Error("Выберите номер пары");
  const title=p.kind==="independent"?"Самостоятельная работа":p.title.trim();
  result=(await client.query("INSERT INTO lessons(journal_id,date,slot,title,kind,practice_no) VALUES($1,$2,$3,$4,$5,$6) RETURNING id",[p.journal_id,p.date,p.slot??null,title,p.kind,p.kind==="practice"?p.practice_no:null])).rows[0];break;
@@ -103,7 +103,7 @@ export async function POST(req:NextRequest) {
  case "lesson-update": {
  const record=(await client.query("SELECT kind,title FROM lessons WHERE id=$1 FOR UPDATE",[p.id])).rows[0];if(!record)throw Error("Запись не найдена");
  if(record.kind==="test"&&(!p.title.trim()||p.slot!==null))throw Error("У теста должны быть название и дата, без номера пары");if(record.kind==="independent"&&p.slot!==null)throw Error("Самостоятельная работа не привязана к номеру пары");if(record.kind==="lesson"&&p.slot===null)throw Error("Выберите номер пары");
- if(record.kind==="practice"&&(p.slot!==null||p.practice_no==null||!p.title.trim()))throw Error("Укажите номер и тему практической");
+ if(record.kind==="practice"&&(p.practice_no==null||!p.title.trim()))throw Error("Укажите номер и тему практической");
  await client.query("UPDATE lessons SET date=$2,slot=$3,title=$4,description=$5,tags=$6,practice_no=$7 WHERE id=$1",[p.id,p.date,p.slot,record.kind==="independent"?record.title:p.title.trim(),p.description,[...new Set(p.tags)],record.kind==="practice"?p.practice_no:null]);break;
  }
  case "mark": {

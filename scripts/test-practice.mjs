@@ -16,6 +16,9 @@ try{
  const journal=(await post({action:'journal',group_id:group,name:'Тестовый предмет',short_name:'QA',period:'2026'})).id;
  const payload={action:'lesson',journal_id:journal,date:'2026-11-09',kind:'practice',practice_no:5,title:'ООП',slot:null};
  const {id}=await post(payload);
+ const pair=slot=>post({action:'lesson',journal_id:journal,date:payload.date,kind:'lesson',slot,title:'Пара'});
+ const [{id:one},{id:two},{id:three}]=await Promise.all([pair(1),pair(2),pair(3)]);
+ await post({action:'lesson',journal_id:journal,date:payload.date,kind:'lesson',slot:2,title:'Дубликат'},400);
  await post({...payload,date:'2026-11-10'},400);
  let data=await state();
  const student=data.students.find(s=>s.group_id===group).id;
@@ -27,8 +30,8 @@ try{
  await batch([op('attendance',{attendance:'late'})],400);
  await assert.rejects(db.query('UPDATE marks SET grades=ARRAY[2,5] WHERE lesson_id=$1',[id]),{code:'23514'});
  await post({action:'mark-batch',lesson_id:id,rows:[{student_id:student,grade:4}]});
- await post({action:'lesson-update',id,date:payload.date,slot:null,practice_no:6,title:'Классы',description:'',tags:[]});
- data=await state();assert.equal(data.lessons.find(l=>l.id===id).practice_no,6);assert.deepEqual(data.marks.find(m=>m.lesson_id===id).grades,[4]);assert.equal(data.marks.find(m=>m.lesson_id===id).overdue,true);
+ await post({action:'lesson-update',id,date:payload.date,slot:2,practice_no:6,title:'Классы',description:'',tags:[]});
+ data=await state();assert.deepEqual(data.lessons.filter(l=>l.journal_id===journal).map(l=>l.id),[one,two,id,three]);assert.equal(data.lessons.find(l=>l.id===id).slot,2);assert.equal(data.lessons.find(l=>l.id===id).practice_no,6);assert.deepEqual(data.marks.find(m=>m.lesson_id===id).grades,[4]);assert.equal(data.marks.find(m=>m.lesson_id===id).overdue,true);
  await batch([op('overdue',{overdue:false})]);
  const cleared=await batch([op('clear',{})]);assert.equal(cleared.marks[0].overdue,false);assert.equal(cleared.marks[0].attendance,'unknown');assert.deepEqual(cleared.marks[0].grades,[]);
  console.log('Practice: numbering, duplicate prevention, final grade replacement, independent absence and overdue flags, editing and clearing passed.');
