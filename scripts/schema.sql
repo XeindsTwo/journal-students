@@ -85,3 +85,9 @@ END $$;
 DROP TRIGGER IF EXISTS enforce_test_mark_trigger ON marks;
 CREATE TRIGGER enforce_test_mark_trigger BEFORE INSERT OR UPDATE ON marks FOR EACH ROW EXECUTE FUNCTION enforce_test_mark();
 COMMIT;
+
+BEGIN;
+ALTER TABLE lessons ADD COLUMN IF NOT EXISTS assessment_type text NOT NULL DEFAULT 'grade';
+ALTER TABLE lessons DROP CONSTRAINT IF EXISTS lessons_assessment_type_check;
+ALTER TABLE lessons ADD CONSTRAINT lessons_assessment_type_check CHECK(assessment_type IN ('grade','credit') AND (kind='practice' OR assessment_type='grade'));
+COMMIT;
